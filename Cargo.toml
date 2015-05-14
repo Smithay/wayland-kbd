@@ -2,3 +2,13 @@
 name = "wayland-kbd"
 version = "0.0.1"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
+
+[dependencies]
+bitflags = "0.1"
+lazy_static = "0.1"
+libc = "0.1"
+mmap = "0.1"
+wayland-client = "^0.1.6"
+
+[dev-dependencies]
+tempfile = "0.1"
