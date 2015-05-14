@@ -6,7 +6,8 @@
 //!
 //! To use it, simply call `MappedKeyboard::new(..)` to wrap you keyboard object
 //! and set the key_action callback. This callback will be provided the keycode,
-//! the new state of the key (up or down), as well as a `KbState` handle.
+//! the new state of the key (up or down), the keyboard ID,
+//! as well as a `KbState` handle.
 //!
 //! This handle will allow you to retrive the keysym associated to the keycode
 //! and compare it to the values defined in the `keysyms` module, or directly

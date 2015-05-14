@@ -44,7 +44,7 @@ fn main() {
 
     let mapped_keyboard = MappedKeyboard::new(keyboard).ok().expect("libxkbcommon unavailable");
 
-    mapped_keyboard.set_key_action(|kbstate, keycode, keystate| {
+    mapped_keyboard.set_key_action(|kbstate, _, _, keycode, keystate| {
         if keystate == KeyState::WL_KEYBOARD_KEY_STATE_PRESSED {
             if let Some(txt) = kbstate.get_utf8(keycode) {
                 print!("{}", txt);

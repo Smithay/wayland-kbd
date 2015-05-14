@@ -1,4 +1,4 @@
-use wayland::core::{Keyboard, KeyState};
+use wayland::core::{Keyboard, KeyState, KeyboardId, SurfaceId};
 
 use libc::size_t;
 
@@ -70,7 +70,7 @@ impl Drop for KbState {
 pub struct MappedKeyboard {
     wkb: Keyboard,
     _state: Arc<Mutex<KbState>>,
-    keyaction: Arc<Mutex<Box<Fn(&KbState, u32, KeyState) + Send + Sync + 'static>>>
+    keyaction: Arc<Mutex<Box<Fn(&KbState, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>>>
 }
 
 impl MappedKeyboard {
@@ -133,14 +133,14 @@ impl MappedKeyboard {
         });
 
         let keyaction = Arc::new(Mutex::new(
-            Box::new(move |_: &_, _, _|{}) as Box<Fn(&KbState, u32, KeyState) + Send + Sync + 'static>
+            Box::new(move |_: &_, _, _, _, _|{}) as Box<Fn(&KbState, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>
         ));
         let ska_action = keyaction.clone();
         let ska_state  = state.clone();
-        keyboard.set_key_action(move |_, _, keycode, keystate| {
+        keyboard.set_key_action(move |kbid, time, keycode, keystate| {
             let state = ska_state.lock().unwrap();
             let action = ska_action.lock().unwrap();
-            action(&*state, keycode + 8, keystate);
+            action(&*state, kbid, time, keycode + 8, keystate);
         });
 
         Ok(MappedKeyboard {
@@ -161,10 +161,47 @@ impl MappedKeyboard {
     ///
     /// The closure is given an handle to a `KbState` that will allow to
     /// translate the keycode into a key symbol or an UTF8 sequence.
+    ///
+    /// arguments are:
+    ///
+    /// - KbState handle
+    /// - KeyboardId of the event
+    /// - time of the event
+    /// - raw keycode
+    /// - new KeyState
     pub fn set_key_action<F>(&self, f: F)
-        where F: Fn(&KbState, u32, KeyState) + Send + Sync + 'static
+        where F: Fn(&KbState, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static
     {
         let mut action = self.keyaction.lock().unwrap();
         *action = Box::new(f);
     }
+
+    /// Defines the action to be executed when a surface gains keyboard focus.
+    ///
+    /// Arguments are:
+    ///
+    /// - Id of the keyboard
+    /// - Id of the surface
+    /// - a slice of the keycodes of the currenlty pressed keys
+    pub fn set_enter_action<F>(&mut self, f: F)
+        where F: Fn(KeyboardId, SurfaceId, &[u32]) + 'static + Send + Sync
+    {
+        self.wkb.set_enter_action(f);
+    }
+
+    /// Defines the action to be executed when a surface loses keyboard focus.
+    ///
+    /// This event is generated *before* the `enter` event is generated for the new
+    /// surface the focus goes to.
+    ///
+    /// Arguments are:
+    ///
+    /// - Id of the keyboard
+    /// - Id of the surface
+    pub fn set_leave_action<F>(&mut self, f: F)
+        where F: Fn(KeyboardId, SurfaceId) + 'static + Send + Sync
+    {
+        self.wkb.set_leave_action(f);
+    }
+
 }
