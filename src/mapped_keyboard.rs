@@ -33,21 +33,21 @@ impl KbState {
     pub fn get_one_sym(&self, keycode: u32) -> u32 {
         unsafe { 
             (XKBH.xkb_state_key_get_one_sym)(
-                self.xkb_state, keycode)
+                self.xkb_state, keycode + 8)
         }
     }
 
     /// Tries to retrieve the generated keycode as an UTF8 sequence
     pub fn get_utf8(&self, keycode: u32) -> Option<String> {
         let size = unsafe {
-            (XKBH.xkb_state_key_get_utf8)(self.xkb_state, keycode, ptr::null_mut(), 0)
+            (XKBH.xkb_state_key_get_utf8)(self.xkb_state, keycode + 8, ptr::null_mut(), 0)
         } + 1;
         if size <= 1 { return None };
         let mut buffer = Vec::with_capacity(size as usize);
         unsafe {
             buffer.set_len(size as usize);
             (XKBH.xkb_state_key_get_utf8)(
-                self.xkb_state, keycode, buffer.as_mut_ptr() as *mut _, size as size_t);
+                self.xkb_state, keycode + 8, buffer.as_mut_ptr() as *mut _, size as size_t);
         };
         // remove the final `\0`
         buffer.pop();
@@ -140,7 +140,7 @@ impl MappedKeyboard {
         keyboard.set_key_action(move |kbid, time, keycode, keystate| {
             let state = ska_state.lock().unwrap();
             let action = ska_action.lock().unwrap();
-            action(&*state, kbid, time, keycode + 8, keystate);
+            action(&*state, kbid, time, keycode, keystate);
         });
 
         Ok(MappedKeyboard {
