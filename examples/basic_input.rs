@@ -1,7 +1,7 @@
-extern crate tempfile;
 extern crate wayland_client as wayland;
 extern crate wayland_kbd;
 
+use std::fs::OpenOptions;
 use std::io::Write;
 
 use wayland::core::{default_display, ShmFormat, KeyState};
@@ -23,7 +23,9 @@ fn main() {
     let shell = registry.get_shell().expect("Unable to get the shell.");
     let shell_surface = shell.get_shell_surface(surface);
     let shm = registry.get_shm().expect("Unable to get the shm.");
-    let mut tmp = tempfile::TempFile::new().ok().expect("Unable to create a tempfile.");
+    // Not a good way to create a shared buffer, but this will do for this example.
+    let mut tmp = OpenOptions::new().read(true).write(true).create(true).truncate(true)
+                            .open("shm.tmp").ok().expect("Unable to create a tempfile.");
     for _ in 0..10_000 {
         let _ = tmp.write(&[0xff, 0xff, 0xff, 0xff]);
     }
