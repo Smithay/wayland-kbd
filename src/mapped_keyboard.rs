@@ -1,4 +1,6 @@
-use wayland::core::{Keyboard, KeyState, KeyboardId, SurfaceId};
+use wayland::core::Serial;
+use wayland::core::compositor::SurfaceId;
+use wayland::core::seat::{Keyboard, KeyState, KeyboardId};
 
 use libc::size_t;
 
@@ -70,7 +72,7 @@ impl Drop for KbState {
 pub struct MappedKeyboard {
     wkb: Keyboard,
     _state: Arc<Mutex<KbState>>,
-    keyaction: Arc<Mutex<Box<Fn(&KbState, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>>>
+    keyaction: Arc<Mutex<Box<Fn(&KbState, Serial, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>>>
 }
 
 impl MappedKeyboard {
@@ -128,19 +130,19 @@ impl MappedKeyboard {
         }));
 
         let sma_state = state.clone();
-        keyboard.set_modifiers_action(move |_, mods_d, mods_la, mods_lo, group| {
+        keyboard.set_modifiers_action(move |_, _, mods_d, mods_la, mods_lo, group| {
             sma_state.lock().unwrap().update_modifiers(mods_d, mods_la, mods_lo, group)
         });
 
         let keyaction = Arc::new(Mutex::new(
-            Box::new(move |_: &_, _, _, _, _|{}) as Box<Fn(&KbState, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>
+            Box::new(move |_: &_, _, _, _, _, _|{}) as Box<Fn(&KbState, Serial, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>
         ));
         let ska_action = keyaction.clone();
         let ska_state  = state.clone();
-        keyboard.set_key_action(move |kbid, time, keycode, keystate| {
+        keyboard.set_key_action(move |kbid, serial, time, keycode, keystate| {
             let state = ska_state.lock().unwrap();
             let action = ska_action.lock().unwrap();
-            action(&*state, kbid, time, keycode, keystate);
+            action(&*state, serial, kbid, time, keycode, keystate);
         });
 
         Ok(MappedKeyboard {
@@ -152,8 +154,8 @@ impl MappedKeyboard {
 
     /// Releases the keyboard from this MappedKeyboard and returns it.
     pub fn release(mut self) -> Keyboard {
-        self.wkb.set_key_action(move |_, _, _, _| {});
-        self.wkb.set_modifiers_action(move |_, _, _, _, _| {});
+        self.wkb.set_key_action(move |_, _, _, _, _| {});
+        self.wkb.set_modifiers_action(move |_, _, _, _, _, _| {});
         self.wkb
     }
 
@@ -170,7 +172,7 @@ impl MappedKeyboard {
     /// - raw keycode
     /// - new KeyState
     pub fn set_key_action<F>(&self, f: F)
-        where F: Fn(&KbState, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static
+        where F: Fn(&KbState, Serial, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static
     {
         let mut action = self.keyaction.lock().unwrap();
         *action = Box::new(f);
@@ -184,7 +186,7 @@ impl MappedKeyboard {
     /// - Id of the surface
     /// - a slice of the keycodes of the currenlty pressed keys
     pub fn set_enter_action<F>(&mut self, f: F)
-        where F: Fn(KeyboardId, SurfaceId, &[u32]) + 'static + Send + Sync
+        where F: Fn(KeyboardId, Serial, SurfaceId, &[u32]) + 'static + Send + Sync
     {
         self.wkb.set_enter_action(f);
     }
@@ -199,7 +201,7 @@ impl MappedKeyboard {
     /// - Id of the keyboard
     /// - Id of the surface
     pub fn set_leave_action<F>(&mut self, f: F)
-        where F: Fn(KeyboardId, SurfaceId) + 'static + Send + Sync
+        where F: Fn(KeyboardId, Serial, SurfaceId) + 'static + Send + Sync
     {
         self.wkb.set_leave_action(f);
     }

@@ -4,7 +4,9 @@ extern crate wayland_kbd;
 use std::fs::OpenOptions;
 use std::io::Write;
 
-use wayland::core::{default_display, ShmFormat, KeyState};
+use wayland::core::default_display;
+use wayland::core::shm::ShmFormat;
+use wayland::core::seat::KeyState;
 
 use wayland_kbd::MappedKeyboard;
 
@@ -31,7 +33,7 @@ fn main() {
     }
     let _ = tmp.flush();
     let pool = shm.pool_from_fd(&tmp, 40_000);
-    let buffer = pool.create_buffer(0, 100, 100, 400, ShmFormat::WL_SHM_FORMAT_ARGB8888)
+    let buffer = pool.create_buffer(0, 100, 100, 400, ShmFormat::ARGB8888)
                      .expect("Could not create buffer.");
     shell_surface.set_toplevel();
     shell_surface.attach(&buffer, 0, 0);
@@ -46,8 +48,8 @@ fn main() {
 
     let mapped_keyboard = MappedKeyboard::new(keyboard).ok().expect("libxkbcommon unavailable");
 
-    mapped_keyboard.set_key_action(|kbstate, _, _, keycode, keystate| {
-        if keystate == KeyState::WL_KEYBOARD_KEY_STATE_PRESSED {
+    mapped_keyboard.set_key_action(|kbstate, _, _, _, keycode, keystate| {
+        if keystate == KeyState::Pressed {
             if let Some(txt) = kbstate.get_utf8(keycode) {
                 print!("{}", txt);
             }

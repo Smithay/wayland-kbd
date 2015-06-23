@@ -12,5 +12,5 @@ bitflags = "0.1"
 lazy_static = "0.1"
 libc = "0.1"
 mmap = "0.1"
-wayland-client = "^0.1.6"
+wayland-client = "^0.2.0"
 
