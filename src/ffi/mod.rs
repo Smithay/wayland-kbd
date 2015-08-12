@@ -3,14 +3,6 @@
 use libc::{uint32_t, c_char, c_int, size_t, c_void, c_uint};
 
 pub mod keysyms;
-#[macro_use]mod dlopen;
-
-extern {
-    pub fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
-    pub fn dlerror() -> *mut c_char;
-    pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
-    pub fn dlclose(handle: *mut c_void) -> c_int;
-}
 
 pub const XKB_MOD_NAME_SHIFT   : &'static str  = "Shift";
 pub const XKB_MOD_NAME_CAPS    : &'static str  = "Lock";
@@ -142,98 +134,77 @@ bitflags!(
     }
 );
 
-external_library!(XkbCommon,
-    xkb_keysym_get_name: unsafe extern fn(keysym: xkb_keysym_t,
-                                          bufer: *mut c_char,
-                                          size: size_t
-                                         ) -> c_int,
-    xkb_keysym_from_name: unsafe extern fn(name: *const c_char,
-                                           flags: xkb_keysym_flags
-                                          ) -> xkb_keysym_t,
-    xkb_keysym_to_utf8: unsafe extern fn(keysym: xkb_keysym_t,
-                                         buffer: *mut c_char,
-                                         size: size_t
-                                        ) -> c_int,
-    xkb_keysym_to_utf32: unsafe extern fn(keysym: xkb_keysym_t) -> uint32_t,
-    xkb_context_new: unsafe extern fn(flags: xkb_context_flags) -> *mut xkb_context,
-    xkb_context_ref: unsafe extern fn(constex: *mut xkb_context) -> *mut xkb_context,
-    xkb_context_unref: unsafe extern fn(context: *mut xkb_context),
-    xkb_context_set_user_data: unsafe extern fn(context: *mut xkb_context,
-                                                user_data: *mut c_void
-                                               ),
-    xkb_context_get_user_data: unsafe extern fn(context: *mut xkb_context) -> *mut c_void,
-    xkb_context_include_path_append: unsafe extern fn(context: *mut xkb_context,
-                                                      path: *const c_char
-                                                     ) -> c_int,
-    xkb_context_include_path_append_default: unsafe extern fn(context: *mut xkb_context) -> c_int,
-    xkb_context_include_path_reset_defaults: unsafe extern fn(context: *mut xkb_context) -> c_int,
-    xkb_context_include_path_clear: unsafe extern fn(context: *mut xkb_context),
-    xkb_context_num_include_paths: unsafe extern fn(context: *mut xkb_context) -> c_uint,
-    xkb_context_include_path_get: unsafe extern fn(context: *mut xkb_context,
-                                                   index: c_uint
-                                                  ) -> *const c_char,
-    xkb_context_set_log_level: unsafe extern fn(context: *mut xkb_context,
-                                                level: xkb_log_level
-                                               ),
-    xkb_context_get_log_level: unsafe extern fn(context: *mut xkb_context) -> xkb_log_level,
-    xkb_context_set_log_verbosity: unsafe extern fn(context: *mut xkb_context, verbosity: c_int),
-    xkb_context_get_log_verbosity: unsafe extern fn(context: *mut xkb_context) -> c_int,
-    xkb_keymap_new_from_names: unsafe extern fn(context: *mut xkb_context,
-                                                names: *const xkb_rule_names,
-                                                flags: xkb_keymap_compile_flags
-                                               ) -> *mut xkb_keymap,
-    xkb_keymap_new_from_string: unsafe extern fn(context: *mut xkb_context,
-                                                 string: *const c_char,
-                                                 format: xkb_keymap_format,
-                                                 flags: xkb_keymap_compile_flags
-                                                ) -> *mut xkb_keymap,
-    xkb_keymap_new_from_buffer: unsafe extern fn(context: *mut xkb_context,
-                                                 buffer: *const c_char,
-                                                 length: size_t,
-                                                 format: xkb_keymap_format,
-                                                 flags: xkb_keymap_compile_flags
-                                                ) -> *mut xkb_keymap,
-    xkb_keymap_ref: unsafe extern fn(keymap: *mut xkb_keymap) -> *mut xkb_keymap,
-    xkb_keymap_unref: unsafe extern fn(keymap: *mut xkb_keymap),
-    xkb_keymap_get_as_string: unsafe extern fn(keymap: *mut xkb_keymap,
-                                               format: xkb_keymap_format
-                                              ) -> *const c_char,
+dlopen_external_library!(XkbCommon,
+functions:
+    fn xkb_keysym_get_name(xkb_keysym_t, *mut c_char, size_t) -> c_int,
+    fn xkb_keysym_from_name(*const c_char, xkb_keysym_flags) -> xkb_keysym_t,
+    fn xkb_keysym_to_utf8(xkb_keysym_t, *mut c_char, size_t) -> c_int,
+    fn xkb_keysym_to_utf32(xkb_keysym_t) -> uint32_t,
+    fn xkb_context_new(xkb_context_flags) -> *mut xkb_context,
+    fn xkb_context_ref(*mut xkb_context) -> *mut xkb_context,
+    fn xkb_context_unref(*mut xkb_context) -> (),
+    fn xkb_context_set_user_data(*mut xkb_context, *mut c_void) -> (),
+    fn xkb_context_get_user_data(*mut xkb_context) -> *mut c_void,
+    fn xkb_context_include_path_append(*mut xkb_context, *const c_char) -> c_int,
+    fn xkb_context_include_path_append_default(*mut xkb_context) -> c_int,
+    fn xkb_context_include_path_reset_defaults(*mut xkb_context) -> c_int,
+    fn xkb_context_include_path_clear(*mut xkb_context) -> (),
+    fn xkb_context_num_include_paths(*mut xkb_context) -> c_uint,
+    fn xkb_context_include_path_get(*mut xkb_context, c_uint) -> *const c_char,
+    fn xkb_context_set_log_level(*mut xkb_context, xkb_log_level) -> (),
+    fn xkb_context_get_log_level(*mut xkb_context) -> xkb_log_level,
+    fn xkb_context_set_log_verbosity(*mut xkb_context, c_int) -> (),
+    fn xkb_context_get_log_verbosity(*mut xkb_context) -> c_int,
+    fn xkb_keymap_new_from_names(*mut xkb_context,
+                                 *const xkb_rule_names,
+                                 xkb_keymap_compile_flags
+                                ) -> *mut xkb_keymap,
+    fn xkb_keymap_new_from_string(*mut xkb_context,
+                                  *const c_char,
+                                  xkb_keymap_format,
+                                  xkb_keymap_compile_flags
+                                 ) -> *mut xkb_keymap,
+    fn xkb_keymap_new_from_buffer(*mut xkb_context,
+                                  *const c_char,
+                                  size_t,
+                                  xkb_keymap_format,
+                                  xkb_keymap_compile_flags
+                                 ) -> *mut xkb_keymap,
+    fn xkb_keymap_ref(*mut xkb_keymap) -> *mut xkb_keymap,
+    fn xkb_keymap_unref(*mut xkb_keymap) -> (),
+    fn xkb_keymap_get_as_string(*mut xkb_keymap, xkb_keymap_format) -> *const c_char,
 
-    xkb_state_new: unsafe extern fn(keymap: *mut xkb_keymap) -> *mut xkb_state,
-    xkb_state_ref: unsafe extern fn(state: *mut xkb_state) -> *mut xkb_state,
-    xkb_state_unref: unsafe extern fn(state: *mut xkb_state),
-    xkb_state_update_mask: unsafe extern fn(state: *mut xkb_state,
-                                            depressed_mods: xkb_mod_mask_t,
-                                            latched_mods: xkb_mod_mask_t,
-                                            locked_mods: xkb_mod_mask_t,
-                                            depressed_layout: xkb_layout_index_t,
-                                            latched_layout: xkb_layout_index_t,
-                                            locked_layout: xkb_layout_index_t
-                                           ) -> xkb_state_component,
-    xkb_state_update_key: unsafe extern fn(state: *mut xkb_state,
-                                           key: xkb_keycode_t,
-                                           direction: xkb_key_direction
-                                          ) -> xkb_state_component,
-    xkb_state_key_get_syms: unsafe extern fn(state: *mut xkb_state,
-                                             key: xkb_keycode_t,
-                                             syms_out: *const *mut xkb_keysym_t
-                                            ) -> c_int,
-    xkb_state_key_get_utf8: unsafe extern fn(state: *mut xkb_state,
-                                             key: xkb_keycode_t,
-                                             buffer: *mut c_char,
-                                             size: size_t
-                                            ) -> c_int,
-    xkb_state_key_get_utf32: unsafe extern fn(state: *mut xkb_state,
-                                              key: xkb_keycode_t
-                                             ) -> uint32_t,
-    xkb_state_key_get_one_sym: unsafe extern fn(state: *mut xkb_state,
-                                                key: xkb_keycode_t
-                                               ) -> xkb_keysym_t
+    fn xkb_state_new(*mut xkb_keymap) -> *mut xkb_state,
+    fn xkb_state_ref(*mut xkb_state) -> *mut xkb_state,
+    fn xkb_state_unref(*mut xkb_state) -> (),
+    fn xkb_state_update_mask(*mut xkb_state,
+                             xkb_mod_mask_t,
+                             xkb_mod_mask_t,
+                             xkb_mod_mask_t,
+                             xkb_layout_index_t,
+                             xkb_layout_index_t,
+                             xkb_layout_index_t
+                            ) -> xkb_state_component,
+    fn xkb_state_update_key(*mut xkb_state,
+                            xkb_keycode_t,
+                            xkb_key_direction
+                           ) -> xkb_state_component,
+    fn xkb_state_key_get_syms(*mut xkb_state,
+                              xkb_keycode_t,
+                              *const *mut xkb_keysym_t
+                             ) -> c_int,
+    fn xkb_state_key_get_utf8(*mut xkb_state,
+                              xkb_keycode_t,
+                              *mut c_char,
+                              size_t
+                             ) -> c_int,
+    fn xkb_state_key_get_utf32(*mut xkb_state, xkb_keycode_t) -> uint32_t,
+    fn xkb_state_key_get_one_sym(*mut xkb_state, xkb_keycode_t) -> xkb_keysym_t
 );
 
 lazy_static!(
     pub static ref XKBCOMMON_OPTION: Option<XkbCommon> = {
-        XkbCommon::open("libxkbcommon.so")
+        XkbCommon::open("libxkbcommon.so").ok()
     };
     pub static ref XKBCOMMON_HANDLE: &'static XkbCommon = {
         XKBCOMMON_OPTION.as_ref().expect("Library libxkbcommon.so could not be loaded.")

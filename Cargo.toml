@@ -13,6 +13,7 @@ lazy_static = "0.1"
 libc = "0.1"
 mmap = "0.1"
 wayland-client = "^0.2.0"
+dlib = "^0.1.1"
 
 [dev-dependencies]
 wayland-client = { features = ["dlopen"] }
