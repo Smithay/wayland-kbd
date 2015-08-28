@@ -1,7 +1,7 @@
 [package]
 name = "wayland-kbd"
 version = "0.2.0"
-documentation = "http://vberger.github.io/wayland-kbd/wayland_kdb/"
+documentation = "http://vberger.github.io/wayland-kbd/wayland_kbd/"
 repository = "https://github.com/vberger/wayland-kdb"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
 license = "MIT"
