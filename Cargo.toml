@@ -15,4 +15,4 @@ wayland-client = "^0.2.0"
 dlib = "^0.1.1"
 
 [dev-dependencies]
-wayland-client = { features = ["dlopen"] }
+wayland-client = { version = "^0.2.0", features = ["dlopen"] }
