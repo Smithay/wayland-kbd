@@ -1,6 +1,6 @@
 [package]
 name = "wayland-kbd"
-version = "0.2.1"
+version = "0.3.0"
 documentation = "http://vberger.github.io/wayland-kbd/wayland_kbd/"
 repository = "https://github.com/vberger/wayland-kbd"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
@@ -11,8 +11,8 @@ description = "Keyboard mapping utility for wayland-client using libxkbcommon."
 bitflags = "0.3"
 lazy_static = "0.1"
 mmap = "0.1"
-wayland-client = "^0.2.0"
+wayland-client = "^0.4.0"
 dlib = "^0.1.1"
 
 [dev-dependencies]
-wayland-client = { version = "^0.2.0", features = ["dlopen"] }
+wayland-client = { version = "^0.4.0", features = ["dlopen"] }
