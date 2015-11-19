@@ -2,8 +2,6 @@ use wayland::core::Serial;
 use wayland::core::compositor::SurfaceId;
 use wayland::core::seat::{Keyboard, KeyState, KeyboardId};
 
-use libc::size_t;
-
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
@@ -49,7 +47,7 @@ impl KbState {
         unsafe {
             buffer.set_len(size as usize);
             (XKBH.xkb_state_key_get_utf8)(
-                self.xkb_state, keycode + 8, buffer.as_mut_ptr() as *mut _, size as size_t);
+                self.xkb_state, keycode + 8, buffer.as_mut_ptr() as *mut _, size as usize);
         };
         // remove the final `\0`
         buffer.pop();

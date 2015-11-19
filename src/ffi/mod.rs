@@ -1,6 +1,6 @@
 #![allow(dead_code, non_camel_case_types)]
 
-use libc::{uint32_t, c_char, c_int, size_t, c_void, c_uint};
+use std::os::raw::{c_char, c_int, c_void, c_uint};
 
 pub mod keysyms;
 
@@ -19,15 +19,15 @@ pub struct xkb_context;
 pub struct xkb_keymap;
 pub struct xkb_state;
 
-pub type xkb_keycode_t = uint32_t;
-pub type xkb_keysym_t = uint32_t;
-pub type xkb_layout_index_t = uint32_t;
-pub type xkb_layout_mask_t = uint32_t;
-pub type xkb_level_index_t = uint32_t;
-pub type xkb_mod_index_t = uint32_t;
-pub type xkb_mod_mask_t = uint32_t;
-pub type xkb_led_index_t = uint32_t;
-pub type xkb_led_mask_t = uint32_t;
+pub type xkb_keycode_t = u32;
+pub type xkb_keysym_t = u32;
+pub type xkb_layout_index_t = u32;
+pub type xkb_layout_mask_t = u32;
+pub type xkb_level_index_t = u32;
+pub type xkb_mod_index_t = u32;
+pub type xkb_mod_mask_t = u32;
+pub type xkb_led_index_t = u32;
+pub type xkb_led_mask_t = u32;
 
 pub const XKB_KEYCODE_INVALID :u32 = 0xffffffff;
 pub const XKB_LAYOUT_INVALID  :u32 = 0xffffffff;
@@ -104,7 +104,7 @@ pub enum xkb_key_direction {
 }
 
 bitflags!(
-    flags xkb_state_component: uint32_t {
+    flags xkb_state_component: u32 {
         /** Depressed modifiers, i.e. a key is physically holding them. */
         const XKB_STATE_MODS_DEPRESSED = (1 << 0),
         /** Latched modifiers, i.e. will be unset after the next non-modifier
@@ -136,10 +136,10 @@ bitflags!(
 
 dlopen_external_library!(XkbCommon,
 functions:
-    fn xkb_keysym_get_name(xkb_keysym_t, *mut c_char, size_t) -> c_int,
+    fn xkb_keysym_get_name(xkb_keysym_t, *mut c_char, usize) -> c_int,
     fn xkb_keysym_from_name(*const c_char, xkb_keysym_flags) -> xkb_keysym_t,
-    fn xkb_keysym_to_utf8(xkb_keysym_t, *mut c_char, size_t) -> c_int,
-    fn xkb_keysym_to_utf32(xkb_keysym_t) -> uint32_t,
+    fn xkb_keysym_to_utf8(xkb_keysym_t, *mut c_char, usize) -> c_int,
+    fn xkb_keysym_to_utf32(xkb_keysym_t) -> u32,
     fn xkb_context_new(xkb_context_flags) -> *mut xkb_context,
     fn xkb_context_ref(*mut xkb_context) -> *mut xkb_context,
     fn xkb_context_unref(*mut xkb_context) -> (),
@@ -166,7 +166,7 @@ functions:
                                  ) -> *mut xkb_keymap,
     fn xkb_keymap_new_from_buffer(*mut xkb_context,
                                   *const c_char,
-                                  size_t,
+                                  usize,
                                   xkb_keymap_format,
                                   xkb_keymap_compile_flags
                                  ) -> *mut xkb_keymap,
@@ -196,9 +196,9 @@ functions:
     fn xkb_state_key_get_utf8(*mut xkb_state,
                               xkb_keycode_t,
                               *mut c_char,
-                              size_t
+                              usize
                              ) -> c_int,
-    fn xkb_state_key_get_utf32(*mut xkb_state, xkb_keycode_t) -> uint32_t,
+    fn xkb_state_key_get_utf32(*mut xkb_state, xkb_keycode_t) -> u32,
     fn xkb_state_key_get_one_sym(*mut xkb_state, xkb_keycode_t) -> xkb_keysym_t
 );
 
