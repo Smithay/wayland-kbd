@@ -18,10 +18,10 @@
 #[macro_use] extern crate dlib;
 #[macro_use] extern crate lazy_static;
 extern crate mmap;
-extern crate wayland_client as wayland;
+extern crate wayland_client;
 
 mod ffi;
 mod mapped_keyboard;
 
 pub use ffi::keysyms;
-pub use mapped_keyboard::{MappedKeyboard, KbState};
+pub use mapped_keyboard::{MappedKeyboard, MappedKeyboardEvent, KeyEvent, MappedKeyboardError};

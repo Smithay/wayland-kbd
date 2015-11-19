@@ -1,8 +1,9 @@
-use wayland::core::Serial;
-use wayland::core::compositor::SurfaceId;
-use wayland::core::seat::{Keyboard, KeyState, KeyboardId};
+use wayland_client::{Event, EventIterator, Proxy};
+use wayland_client::wayland::seat::{WlSeat, WlKeyboard, WlKeyboardEvent, WlKeyboardKeyState};
 
+use std::iter::Iterator;
 use std::ptr;
+use std::os::unix::io::RawFd;
 use std::sync::{Arc, Mutex};
 
 use mmap::{MemoryMap, MapOption};
@@ -10,14 +11,11 @@ use mmap::{MemoryMap, MapOption};
 use ffi;
 use ffi::XKBCOMMON_HANDLE as XKBH;
 
-pub struct KbState {
-    xkb_contex: *mut ffi::xkb_context,
+struct KbState {
+    xkb_context: *mut ffi::xkb_context,
     xkb_keymap: *mut ffi::xkb_keymap,
     xkb_state: *mut ffi::xkb_state
 }
-
-#[doc(hidden)]
-unsafe impl Send for KbState {}
 
 impl KbState {
     fn update_modifiers(&mut self, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) {
@@ -27,9 +25,6 @@ impl KbState {
         }
     }
 
-    /// Tries to match this keycode as a key symbol according to current keyboard state.
-    ///
-    /// Returns 0 if not possible (meaning that this keycode maps to more than one key symbol).
     pub fn get_one_sym(&self, keycode: u32) -> u32 {
         unsafe { 
             (XKBH.xkb_state_key_get_one_sym)(
@@ -37,7 +32,6 @@ impl KbState {
         }
     }
 
-    /// Tries to retrieve the generated keycode as an UTF8 sequence
     pub fn get_utf8(&self, keycode: u32) -> Option<String> {
         let size = unsafe {
             (XKBH.xkb_state_key_get_utf8)(self.xkb_state, keycode + 8, ptr::null_mut(), 0)
@@ -56,46 +50,105 @@ impl KbState {
     }
 }
 
+pub enum MappedKeyboardEvent {
+    KeyEvent(KeyEvent),
+    Other(WlKeyboardEvent)
+}
+
+pub struct KeyEvent {
+    keycode: u32,
+    state: Arc<Mutex<KbState>>,
+    pub serial: u32,
+    pub time: u32,
+    pub keystate: WlKeyboardKeyState
+}
+
+impl KeyEvent {
+    /// Tries to retrieve the key event as an UTF8 sequence
+    pub fn as_utf8(&self) -> Option<String> {
+        self.state.lock().unwrap().get_utf8(self.keycode)
+    }
+
+    // Tries to match this key event as a key symbol according to current keyboard state.
+    ///
+    /// Returns 0 if not possible (meaning that this keycode maps to more than one key symbol).
+    pub fn as_symbol(&self) -> Option<u32> {
+        let val = self.state.lock().unwrap().get_one_sym(self.keycode);
+        if val == 0 {
+            None
+        } else {
+            Some(val)
+        }
+    }
+}
+
+#[doc(hidden)]
+unsafe impl Send for KbState {}
+
 impl Drop for KbState {
     fn drop(&mut self) {
         unsafe {
             (XKBH.xkb_state_unref)(self.xkb_state);
             (XKBH.xkb_keymap_unref)(self.xkb_keymap);
-            (XKBH.xkb_context_unref)(self.xkb_contex);
+            (XKBH.xkb_context_unref)(self.xkb_context);
         }
     }
 }
 
 /// A wayland keyboard mapped to its keymap
+///
+/// It wraps an event iterator on this keyboard, catching the Keymap, Key, and Modifiers
+/// events of the keyboard to handle them using libxkbcommon. All other events are directly
+/// forwarded.
 pub struct MappedKeyboard {
-    wkb: Keyboard,
-    _state: Arc<Mutex<KbState>>,
-    keyaction: Arc<Mutex<Box<Fn(&KbState, Serial, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>>>
+    wkb: WlKeyboard,
+    state: Arc<Mutex<KbState>>,
+    iter: EventIterator
+}
+
+pub enum MappedKeyboardError {
+    XKBNotFound,
+    NoKeyboardOnSeat
 }
 
 impl MappedKeyboard {
-    /// Creates a mapped keyboard from a regular wayland keyboard.
+    /// Creates a mapped keyboard by extracting the keyboard from a seat.
     ///
     /// Make sure the initialization phase of the keyboard is finished
     /// (with `Display::sync_roundtrip()` for example), otherwise the
     /// keymap won't be available.
     ///
-    /// Will return Err() and hand back the untouched keyboard if 
-    /// `libxkbcommon.so` is not available or the keyboard had no
-    /// associated keymap.
-    pub fn new(mut keyboard: Keyboard) -> Result<MappedKeyboard, Keyboard> {
+    /// Will return Err() if `libxkbcommon.so` is not available or the
+    /// keyboard had no associated keymap.
+    pub fn new(seat: &WlSeat) -> Result<MappedKeyboard, MappedKeyboardError> {
+        let mut keyboard = seat.get_keyboard();
         let xkbh = match ffi::XKBCOMMON_OPTION.as_ref() {
             Some(h) => h,
-            None => return Err(keyboard)
+            None => return Err(MappedKeyboardError::XKBNotFound)
         };
         let xkb_context = unsafe {
             (xkbh.xkb_context_new)(ffi::xkb_context_flags::XKB_CONTEXT_NO_FLAGS)
         };
-        if xkb_context.is_null() { return Err(keyboard) }
-        let (fd, size) = match keyboard.keymap_fd() {
-            Some((fd, size)) => (fd, size),
-            None => return Err(keyboard)
-        };
+        if xkb_context.is_null() { return Err(MappedKeyboardError::XKBNotFound) }
+
+        let iter = EventIterator::new();
+
+        keyboard.set_evt_iterator(&iter);
+
+        Ok(MappedKeyboard {
+            wkb: keyboard,
+            state: Arc::new(Mutex::new(KbState {
+                xkb_context: xkb_context,
+                xkb_keymap: ptr::null_mut(),
+                xkb_state: ptr::null_mut()
+            })),
+            iter: iter
+        })
+    }
+
+
+    fn init(&mut self, fd: RawFd, size: usize) {
+        let mut state = self.state.lock().unwrap();
 
         let map = MemoryMap::new(
             size as usize,
@@ -104,8 +157,8 @@ impl MappedKeyboard {
 
         let xkb_keymap = {
             unsafe {
-                (xkbh.xkb_keymap_new_from_string)(
-                    xkb_context,
+                (XKBH.xkb_keymap_new_from_string)(
+                    state.xkb_context,
                     map.data() as *const _,
                     ffi::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
                     ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS
@@ -118,90 +171,53 @@ impl MappedKeyboard {
         }
 
         let xkb_state = unsafe {
-            (xkbh.xkb_state_new)(xkb_keymap)
+            (XKBH.xkb_state_new)(xkb_keymap)
         };
 
-        let state = Arc::new(Mutex::new(KbState {
-            xkb_contex: xkb_context,
-            xkb_keymap : xkb_keymap,
-            xkb_state: xkb_state
-        }));
-
-        let sma_state = state.clone();
-        keyboard.set_modifiers_action(move |_, _, mods_d, mods_la, mods_lo, group| {
-            sma_state.lock().unwrap().update_modifiers(mods_d, mods_la, mods_lo, group)
-        });
-
-        let keyaction = Arc::new(Mutex::new(
-            Box::new(move |_: &_, _, _, _, _, _|{}) as Box<Fn(&KbState, Serial, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static>
-        ));
-        let ska_action = keyaction.clone();
-        let ska_state  = state.clone();
-        keyboard.set_key_action(move |kbid, serial, time, keycode, keystate| {
-            let state = ska_state.lock().unwrap();
-            let action = ska_action.lock().unwrap();
-            action(&*state, serial, kbid, time, keycode, keystate);
-        });
-
-        Ok(MappedKeyboard {
-            wkb: keyboard,
-            _state: state,
-            keyaction: keyaction
-        })
+        state.xkb_keymap = xkb_keymap;
+        state.xkb_state = xkb_state;
     }
+}
 
-    /// Releases the keyboard from this MappedKeyboard and returns it.
-    pub fn release(mut self) -> Keyboard {
-        self.wkb.set_key_action(move |_, _, _, _, _| {});
-        self.wkb.set_modifiers_action(move |_, _, _, _, _, _| {});
-        self.wkb
+impl Iterator for MappedKeyboard {
+    type Item = MappedKeyboardEvent;
+
+    fn next(&mut self) -> Option<MappedKeyboardEvent> {
+        use wayland_client::wayland::WaylandProtocolEvent;
+        use wayland_client::wayland::seat::WlKeyboardEvent;
+        loop {
+            match self.iter.next() {
+                None => return None,
+                Some(Event::Wayland(WaylandProtocolEvent::WlKeyboard(proxy, event))) => {
+                    if proxy == self.wkb.id() {
+                        match event {
+                            WlKeyboardEvent::Keymap(_format, fd, size) => {
+                                self.init(fd, size as usize);
+                                continue
+                            },
+                            WlKeyboardEvent::Modifiers(_, mods_d, mods_la, mods_lo, group) => {
+                                self.state.lock().unwrap().update_modifiers(mods_d,mods_la, mods_lo, group);
+                                continue;
+                            }
+                            WlKeyboardEvent::Key(serial, time, key, keystate) => {
+                                return Some(MappedKeyboardEvent::KeyEvent(KeyEvent {
+                                    keycode: key,
+                                    state: self.state.clone(),
+                                    time: time,
+                                    serial: serial,
+                                    keystate: keystate
+                                }));
+                            }
+                            _ => return Some(MappedKeyboardEvent::Other(event))
+                        }
+                    } else {
+                        // should never happen, actually...
+                        continue
+                    }
+                },
+                // should never happen, actually...
+                _ => continue
+            }
+        }
     }
-
-    /// Sets the action to perform when a key is pressed or released.
-    ///
-    /// The closure is given an handle to a `KbState` that will allow to
-    /// translate the keycode into a key symbol or an UTF8 sequence.
-    ///
-    /// arguments are:
-    ///
-    /// - KbState handle
-    /// - KeyboardId of the event
-    /// - time of the event
-    /// - raw keycode
-    /// - new KeyState
-    pub fn set_key_action<F>(&self, f: F)
-        where F: Fn(&KbState, Serial, KeyboardId, u32, u32, KeyState) + Send + Sync + 'static
-    {
-        let mut action = self.keyaction.lock().unwrap();
-        *action = Box::new(f);
-    }
-
-    /// Defines the action to be executed when a surface gains keyboard focus.
-    ///
-    /// Arguments are:
-    ///
-    /// - Id of the keyboard
-    /// - Id of the surface
-    /// - a slice of the keycodes of the currenlty pressed keys
-    pub fn set_enter_action<F>(&mut self, f: F)
-        where F: Fn(KeyboardId, Serial, SurfaceId, &[u32]) + 'static + Send + Sync
-    {
-        self.wkb.set_enter_action(f);
-    }
-
-    /// Defines the action to be executed when a surface loses keyboard focus.
-    ///
-    /// This event is generated *before* the `enter` event is generated for the new
-    /// surface the focus goes to.
-    ///
-    /// Arguments are:
-    ///
-    /// - Id of the keyboard
-    /// - Id of the surface
-    pub fn set_leave_action<F>(&mut self, f: F)
-        where F: Fn(KeyboardId, Serial, SurfaceId) + 'static + Send + Sync
-    {
-        self.wkb.set_leave_action(f);
-    }
-
 }
