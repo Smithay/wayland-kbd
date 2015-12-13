@@ -56,7 +56,9 @@ pub enum MappedKeyboardEvent {
 }
 
 pub struct KeyEvent {
-    keycode: u32,
+    /// The raw keycode associated with this event. Only use it if
+    /// you know what you're doing.
+    pub keycode: u32,
     state: Arc<Mutex<KbState>>,
     pub serial: u32,
     pub time: u32,
@@ -69,7 +71,7 @@ impl KeyEvent {
         self.state.lock().unwrap().get_utf8(self.keycode)
     }
 
-    // Tries to match this key event as a key symbol according to current keyboard state.
+    /// Tries to match this key event as a key symbol according to current keyboard state.
     ///
     /// Returns 0 if not possible (meaning that this keycode maps to more than one key symbol).
     pub fn as_symbol(&self) -> Option<u32> {
