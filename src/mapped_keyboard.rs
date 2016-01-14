@@ -1,12 +1,13 @@
 use wayland_client::{Event, EventIterator, Proxy};
 use wayland_client::wayland::seat::{WlSeat, WlKeyboard, WlKeyboardEvent, WlKeyboardKeyState};
 
+use std::fs::File;
 use std::iter::Iterator;
 use std::ptr;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{FromRawFd, RawFd};
 use std::sync::{Arc, Mutex};
 
-use mmap::{MemoryMap, MapOption};
+use memmap::{Mmap, Protection};
 
 use ffi;
 use ffi::XKBCOMMON_HANDLE as XKBH;
@@ -26,7 +27,7 @@ impl KbState {
     }
 
     pub fn get_one_sym(&self, keycode: u32) -> u32 {
-        unsafe { 
+        unsafe {
             (XKBH.xkb_state_key_get_one_sym)(
                 self.xkb_state, keycode + 8)
         }
@@ -152,16 +153,15 @@ impl MappedKeyboard {
     fn init(&mut self, fd: RawFd, size: usize) {
         let mut state = self.state.lock().unwrap();
 
-        let map = MemoryMap::new(
-            size as usize,
-            &[MapOption::MapReadable, MapOption::MapFd(fd)]
-        ).unwrap();
+        let map = unsafe {
+            Mmap::open_with_offset(&File::from_raw_fd(fd), Protection::Read, 0, size).unwrap()
+        };
 
         let xkb_keymap = {
             unsafe {
                 (XKBH.xkb_keymap_new_from_string)(
                     state.xkb_context,
-                    map.data() as *const _,
+                    map.ptr() as *const _,
                     ffi::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
                     ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS
                 )

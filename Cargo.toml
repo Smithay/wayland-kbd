@@ -10,7 +10,7 @@ description = "Keyboard mapping utility for wayland-client using libxkbcommon."
 [dependencies]
 bitflags = "0.3"
 lazy_static = "0.1"
-mmap = "0.1"
+memmap = "0.2"
 wayland-client = "0.5"
 dlib = "0.2"
 

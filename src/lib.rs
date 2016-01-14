@@ -17,7 +17,7 @@
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate dlib;
 #[macro_use] extern crate lazy_static;
-extern crate mmap;
+extern crate memmap;
 extern crate wayland_client;
 
 mod ffi;
