@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.4 - 2016-01-16
+
+Switched from rust-mmap to memmap-rs.
+
 ## 0.3.3 - 2015-12-13
 
 Made `KayEvent.keycode` public, for advanced uses.
