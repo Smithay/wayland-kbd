@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.5 - 2015-11-19
+
+Update dlib and wayland-client dependencies.
+
 ## 0.3.4 - 2016-01-16
 
 Switched from rust-mmap to memmap-rs.

@@ -199,7 +199,7 @@ functions:
                               usize
                              ) -> c_int,
     fn xkb_state_key_get_utf32(*mut xkb_state, xkb_keycode_t) -> u32,
-    fn xkb_state_key_get_one_sym(*mut xkb_state, xkb_keycode_t) -> xkb_keysym_t
+    fn xkb_state_key_get_one_sym(*mut xkb_state, xkb_keycode_t) -> xkb_keysym_t,
 );
 
 lazy_static!(
