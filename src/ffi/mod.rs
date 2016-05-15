@@ -104,7 +104,7 @@ pub enum xkb_key_direction {
 }
 
 bitflags!(
-    flags xkb_state_component: u32 {
+    pub flags xkb_state_component: u32 {
         /** Depressed modifiers, i.e. a key is physically holding them. */
         const XKB_STATE_MODS_DEPRESSED = (1 << 0),
         /** Latched modifiers, i.e. will be unset after the next non-modifier
