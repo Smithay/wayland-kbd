@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.6 - 2016-05-15
+
+Update bitflags to 0.7.
+
 ## 0.3.5 - 2015-11-19
 
 Update dlib and wayland-client dependencies.
