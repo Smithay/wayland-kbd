@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.0 - 2016-05-29
+
+Update to wayland-client-0.6
+
 ## 0.3.6 - 2016-05-15
 
 Update bitflags to 0.7.

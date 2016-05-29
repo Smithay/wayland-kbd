@@ -1,4 +1,5 @@
 use wayland_client::{Event, EventIterator, Proxy};
+use wayland_client::wayland::WlDisplay;
 use wayland_client::wayland::seat::{WlSeat, WlKeyboard, WlKeyboardEvent, WlKeyboardKeyState};
 
 use std::fs::File;
@@ -123,7 +124,7 @@ impl MappedKeyboard {
     ///
     /// Will return Err() if `libxkbcommon.so` is not available or the
     /// keyboard had no associated keymap.
-    pub fn new(seat: &WlSeat) -> Result<MappedKeyboard, MappedKeyboardError> {
+    pub fn new(seat: &WlSeat, display: &WlDisplay) -> Result<MappedKeyboard, MappedKeyboardError> {
         let mut keyboard = seat.get_keyboard();
         let xkbh = match ffi::XKBCOMMON_OPTION.as_ref() {
             Some(h) => h,
@@ -134,9 +135,9 @@ impl MappedKeyboard {
         };
         if xkb_context.is_null() { return Err(MappedKeyboardError::XKBNotFound) }
 
-        let iter = EventIterator::new();
+        let iter = display.create_event_iterator();
 
-        keyboard.set_evt_iterator(&iter);
+        keyboard.set_event_iterator(&iter);
 
         Ok(MappedKeyboard {
             wkb: keyboard,
