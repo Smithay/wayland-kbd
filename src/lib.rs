@@ -1,17 +1,12 @@
 //! Keyboard mapping utility for `wayland-client` using libxkbcommon.
 //!
-//! This library provides a simple wrapper for the wayland Keyboard objects,
+//! This library provides a simple handler for the wayland Keyboard objects,
 //! handling all keymap issues using libxkbcommon in a dynamic way (loading the
 //! library dynamically and thus not being linked to it).
 //!
-//! To use it, simply call `MappedKeyboard::new(..)` to wrap you keyboard object
-//! and set the key_action callback. This callback will be provided the keycode,
-//! the new state of the key (up or down), the keyboard ID,
-//! as well as a `KbState` handle.
-//!
-//! This handle will allow you to retrive the keysym associated to the keycode
-//! and compare it to the values defined in the `keysyms` module, or directly
-//! restrieve an (utf8) String representation of this character.
+//! To use it, create your backend handler implementing the `wayland_kbd::Handler` trait,
+//! and provide a `MappedKeyboard<YourHandler>` to the event queue. The MappedKeyboard
+//! will translate the events into utf8 and forward them to you.
 
 
 #[macro_use] extern crate bitflags;
@@ -24,4 +19,4 @@ mod ffi;
 mod mapped_keyboard;
 
 pub use ffi::keysyms;
-pub use mapped_keyboard::{MappedKeyboard, MappedKeyboardEvent, KeyEvent, MappedKeyboardError};
+pub use mapped_keyboard::{MappedKeyboard, MappedKeyboardError, Handler};

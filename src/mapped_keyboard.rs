@@ -1,12 +1,10 @@
-use wayland_client::{Event, EventIterator, Proxy};
-use wayland_client::wayland::WlDisplay;
-use wayland_client::wayland::seat::{WlSeat, WlKeyboard, WlKeyboardEvent, WlKeyboardKeyState};
+use wayland_client::EventQueueHandle;
+use wayland_client::protocol::wl_keyboard::{self, WlKeyboard, KeyState, KeymapFormat};
+use wayland_client::protocol::wl_surface::WlSurface;
 
 use std::fs::File;
-use std::iter::Iterator;
 use std::ptr;
 use std::os::unix::io::{FromRawFd, RawFd};
-use std::sync::{Arc, Mutex};
 
 use memmap::{Mmap, Protection};
 
@@ -48,46 +46,9 @@ impl KbState {
         // remove the final `\0`
         buffer.pop();
         // libxkbcommon will always provide valid UTF8
-        Some(String::from_utf8(buffer).unwrap())
+        Some(unsafe { String::from_utf8_unchecked(buffer) } )
     }
 }
-
-pub enum MappedKeyboardEvent {
-    KeyEvent(KeyEvent),
-    Other(WlKeyboardEvent)
-}
-
-pub struct KeyEvent {
-    /// The raw keycode associated with this event. Only use it if
-    /// you know what you're doing.
-    pub keycode: u32,
-    state: Arc<Mutex<KbState>>,
-    pub serial: u32,
-    pub time: u32,
-    pub keystate: WlKeyboardKeyState
-}
-
-impl KeyEvent {
-    /// Tries to retrieve the key event as an UTF8 sequence
-    pub fn as_utf8(&self) -> Option<String> {
-        self.state.lock().unwrap().get_utf8(self.keycode)
-    }
-
-    /// Tries to match this key event as a key symbol according to current keyboard state.
-    ///
-    /// Returns 0 if not possible (meaning that this keycode maps to more than one key symbol).
-    pub fn as_symbol(&self) -> Option<u32> {
-        let val = self.state.lock().unwrap().get_one_sym(self.keycode);
-        if val == 0 {
-            None
-        } else {
-            Some(val)
-        }
-    }
-}
-
-#[doc(hidden)]
-unsafe impl Send for KbState {}
 
 impl Drop for KbState {
     fn drop(&mut self) {
@@ -104,10 +65,9 @@ impl Drop for KbState {
 /// It wraps an event iterator on this keyboard, catching the Keymap, Key, and Modifiers
 /// events of the keyboard to handle them using libxkbcommon. All other events are directly
 /// forwarded.
-pub struct MappedKeyboard {
-    wkb: WlKeyboard,
-    state: Arc<Mutex<KbState>>,
-    iter: EventIterator
+pub struct MappedKeyboard<H: Handler> {
+    state: KbState,
+    handler: H
 }
 
 pub enum MappedKeyboardError {
@@ -115,17 +75,8 @@ pub enum MappedKeyboardError {
     NoKeyboardOnSeat
 }
 
-impl MappedKeyboard {
-    /// Creates a mapped keyboard by extracting the keyboard from a seat.
-    ///
-    /// Make sure the initialization phase of the keyboard is finished
-    /// (with `Display::sync_roundtrip()` for example), otherwise the
-    /// keymap won't be available.
-    ///
-    /// Will return Err() if `libxkbcommon.so` is not available or the
-    /// keyboard had no associated keymap.
-    pub fn new(seat: &WlSeat, display: &WlDisplay) -> Result<MappedKeyboard, MappedKeyboardError> {
-        let mut keyboard = seat.get_keyboard();
+impl<H: Handler> MappedKeyboard<H> {
+    pub fn new(handler: H) -> Result<MappedKeyboard<H>, MappedKeyboardError> {
         let xkbh = match ffi::XKBCOMMON_OPTION.as_ref() {
             Some(h) => h,
             None => return Err(MappedKeyboardError::XKBNotFound)
@@ -135,24 +86,19 @@ impl MappedKeyboard {
         };
         if xkb_context.is_null() { return Err(MappedKeyboardError::XKBNotFound) }
 
-        let iter = display.create_event_iterator();
-
-        keyboard.set_event_iterator(&iter);
-
         Ok(MappedKeyboard {
-            wkb: keyboard,
-            state: Arc::new(Mutex::new(KbState {
+            state: KbState {
                 xkb_context: xkb_context,
                 xkb_keymap: ptr::null_mut(),
                 xkb_state: ptr::null_mut()
-            })),
-            iter: iter
+            },
+            handler: handler
         })
     }
 
 
     fn init(&mut self, fd: RawFd, size: usize) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = &mut self.state;
 
         let map = unsafe {
             Mmap::open_with_offset(&File::from_raw_fd(fd), Protection::Read, 0, size).unwrap()
@@ -182,45 +128,53 @@ impl MappedKeyboard {
     }
 }
 
-impl Iterator for MappedKeyboard {
-    type Item = MappedKeyboardEvent;
+#[allow(unused_variables)]
+pub trait Handler {
+    fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, keysyms: Vec<u32>) {
+    }
 
-    fn next(&mut self) -> Option<MappedKeyboardEvent> {
-        use wayland_client::wayland::WaylandProtocolEvent;
-        use wayland_client::wayland::seat::WlKeyboardEvent;
-        loop {
-            match self.iter.next() {
-                None => return None,
-                Some(Event::Wayland(WaylandProtocolEvent::WlKeyboard(proxy, event))) => {
-                    if proxy == self.wkb.id() {
-                        match event {
-                            WlKeyboardEvent::Keymap(_format, fd, size) => {
-                                self.init(fd, size as usize);
-                                continue
-                            },
-                            WlKeyboardEvent::Modifiers(_, mods_d, mods_la, mods_lo, group) => {
-                                self.state.lock().unwrap().update_modifiers(mods_d,mods_la, mods_lo, group);
-                                continue;
-                            }
-                            WlKeyboardEvent::Key(serial, time, key, keystate) => {
-                                return Some(MappedKeyboardEvent::KeyEvent(KeyEvent {
-                                    keycode: key,
-                                    state: self.state.clone(),
-                                    time: time,
-                                    serial: serial,
-                                    keystate: keystate
-                                }));
-                            }
-                            _ => return Some(MappedKeyboardEvent::Other(event))
-                        }
-                    } else {
-                        // should never happen, actually...
-                        continue
-                    }
-                },
-                // should never happen, actually...
-                _ => continue
-            }
-        }
+    fn leave(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface) {
+    }
+
+    fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, keysym: u32, state: KeyState, utf8: Option<String>) {
+    }
+
+    fn repeat_info(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, rate: i32, delay: i32) {
+    }
+}
+
+impl<H: Handler> wl_keyboard::Handler for MappedKeyboard<H> {
+    fn keymap(&mut self, _: &mut EventQueueHandle, _: &WlKeyboard, _: KeymapFormat, fd: RawFd, size: u32) {
+        self.init(fd, size as usize)
+    }
+
+    fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, keys: Vec<u8>) {
+        let keys: &[u32] = unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len()/4) };
+        let keys = keys.iter().map(|k| self.state.get_one_sym(*k)).collect();
+        self.handler.enter(evqh, proxy, serial, surface, keys)
+    }
+
+    fn leave(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface) {
+        self.handler.leave(evqh, proxy, serial, surface)
+    }
+
+    fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, key: u32, state: KeyState) {
+        let sym = self.state.get_one_sym(key);
+        let utf8 = self.state.get_utf8(key);
+        self.handler.key(evqh, proxy, serial, time, sym, state, utf8)
+    }
+
+    fn modifiers(&mut self, _: &mut EventQueueHandle, _: &WlKeyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) {
+        self.state.update_modifiers(mods_depressed, mods_latched, mods_locked, group)
+    }
+
+    fn repeat_info(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, rate: i32, delay: i32) {
+        self.handler.repeat_info(evqh, proxy, rate, delay)
+    }
+}
+
+unsafe impl<H: Handler> ::wayland_client::Handler<WlKeyboard> for MappedKeyboard<H> {
+    unsafe fn message(&mut self, evq: &mut EventQueueHandle, proxy: &WlKeyboard, opcode: u32, args: *const ::wayland_client::sys::wl_argument) -> Result<(),()> {
+        <MappedKeyboard<H> as ::wayland_client::protocol::wl_keyboard::Handler>::__message(self, evq, proxy, opcode, args)
     }
 }

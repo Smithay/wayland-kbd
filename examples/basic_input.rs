@@ -9,76 +9,98 @@ use byteorder::{WriteBytesExt, NativeEndian};
 use std::os::unix::io::AsRawFd;
 use std::io::Write;
 
-use wayland_client::Event;
-use wayland_client::wayland::{get_display, WaylandProtocolEvent};
-use wayland_client::wayland::compositor::WlCompositor;
-use wayland_client::wayland::shm::{WlShm, WlShmFormat};
-use wayland_client::wayland::seat::{WlSeat, WlKeyboardKeyState};
-use wayland_client::wayland::shell::{WlShell, WlShellSurfaceEvent};
+use wayland_client::{EventQueueHandle, EnvHandler};
+use wayland_client::protocol::{wl_compositor, wl_shell, wl_shm, wl_shell_surface,
+                               wl_seat, wl_keyboard};
 
-use wayland_kbd::{MappedKeyboard, MappedKeyboardEvent};
+use wayland_kbd::MappedKeyboard;
 
 wayland_env!(WaylandEnv,
-    compositor: WlCompositor,
-    seat: WlSeat,
-    shm: WlShm,
-    shell: WlShell
+    compositor: wl_compositor::WlCompositor,
+    seat: wl_seat::WlSeat,
+    shm: wl_shm::WlShm,
+    shell: wl_shell::WlShell
 );
 
+struct ShellHandler;
+
+impl wl_shell_surface::Handler for ShellHandler {
+    // required to avoid being marked as "unresponsive"
+    fn ping(&mut self, _: &mut EventQueueHandle, me: &wl_shell_surface::WlShellSurface, serial: u32) {
+        me.pong(serial);
+    }
+}
+
+declare_handler!(ShellHandler, wl_shell_surface::Handler, wl_shell_surface::WlShellSurface);
+
+struct KbdHandler;
+
+impl wayland_kbd::Handler for KbdHandler {
+    fn key(&mut self, _: &mut EventQueueHandle, _: &wl_keyboard::WlKeyboard, _: u32, _: u32, _: u32,
+           state: wl_keyboard::KeyState, utf8: Option<String>) {
+        if let wl_keyboard::KeyState::Pressed = state {
+            if let Some(txt) = utf8 {
+                print!("{}", txt);
+                ::std::io::stdout().flush().unwrap();
+            }
+        }
+    }
+}
+
 fn main() {
-    let (display, event_iterator) = get_display().expect("Unable to connect to Wayland server.");
+    let (display, mut event_queue) = match wayland_client::default_connect() {
+        Ok(ret) => ret,
+        Err(e) => panic!("Cannot connect to wayland server: {:?}", e)
+    };
 
-    let (env, mut event_iterator) = WaylandEnv::init(display, event_iterator);
+    event_queue.add_handler(EnvHandler::<WaylandEnv>::new());
+    let registry = display.get_registry().expect("Display cannot be already destroyed.");
+    event_queue.register::<_, EnvHandler<WaylandEnv>>(&registry,0);
+    event_queue.sync_roundtrip().unwrap();
 
-    // quickly extract the global we need, and fail-fast if any is missing
-    // should not happen, as these are supposed to always be implemented by
-    // the compositor
-    let compositor = env.compositor.as_ref().map(|o| &o.0).unwrap();
-    let seat = env.seat.as_ref().map(|o| &o.0).unwrap();
-    let shell = env.shell.as_ref().map(|o| &o.0).unwrap();
-    let shm = env.shm.as_ref().map(|o| &o.0).unwrap();
-
-    let surface = compositor.create_surface();
-    let shell_surface = shell.get_shell_surface(&surface);
-    shell_surface.set_toplevel();
-
-    // create a tempfile to write on
+    // create a tempfile to write the conents of the window on
     let mut tmp = tempfile::tempfile().ok().expect("Unable to create a tempfile.");
-    // write the contents to it, lets put everything in dark red
+    // write the contents to it, lets put a red background
     for _ in 0..10_000 {
-        let _ = tmp.write_u32::<NativeEndian>(0xFFFFFFFF);
+        let _ = tmp.write_u32::<NativeEndian>(0xFFFF0000);
     }
     let _ = tmp.flush();
-    let pool = shm.create_pool(tmp.as_raw_fd(), 40_000);
-    let buffer = pool.create_buffer(0, 100, 100, 400, WlShmFormat::Argb8888);
-    surface.attach(Some(&buffer), 0, 0);
-    surface.commit();
 
-    let mut mapped_keyboard = MappedKeyboard::new(seat, &env.display).ok().expect("libxkbcommon unavailable");
+    // prepare the wayland surface
+    let (shell_surface, keyboard) = {
+        // introduce a new scope because .state() borrows the event_queue
+        let state = event_queue.state();
+        // retrieve the EnvHandler
+        let env = state.get_handler::<EnvHandler<WaylandEnv>>(0);
+        let surface = env.compositor.create_surface().expect("Compositor cannot be destroyed");
+        let shell_surface = env.shell.get_shell_surface(&surface).expect("Shell cannot be destroyed");
 
-    event_iterator.sync_roundtrip().unwrap();
+        let pool = env.shm.create_pool(tmp.as_raw_fd(), 40_000).expect("Shm cannot be destroyed");
+        // match a buffer on the part we wrote on
+        let buffer = pool.create_buffer(0, 100, 100, 400, wl_shm::Format::Argb8888).expect("The pool cannot be already dead");
+
+        // make our surface as a toplevel one
+        shell_surface.set_toplevel();
+        // attach the buffer to it
+        surface.attach(Some(&buffer), 0, 0);
+        // commit
+        surface.commit();
+
+        let keyboard = env.seat.get_keyboard().expect("Seat cannot be destroyed.");
+
+        // we can let the other objects go out of scope
+        // their associated wyland objects won't automatically be destroyed
+        // and we don't need them in this example
+        (shell_surface, keyboard)
+    };
+
+    let shell_handler = event_queue.add_handler(ShellHandler);
+    event_queue.register::<_, ShellHandler>(&shell_surface, shell_handler);
+    let kbd_handler = event_queue.add_handler(MappedKeyboard::new(KbdHandler).ok().expect("libxkbcommon is missing!"));
+    event_queue.register::<_, MappedKeyboard<KbdHandler>>(&keyboard, kbd_handler);
 
     loop {
-        for evt in &mut event_iterator {
-            match evt {
-                Event::Wayland(WaylandProtocolEvent::WlShellSurface(
-                    _proxy, WlShellSurfaceEvent::Ping(p)
-                )) => {
-                    shell_surface.pong(p);
-                },
-                _ => { /* ignore all else */ }
-            }
-        }
-        for evt in &mut mapped_keyboard {
-            if let MappedKeyboardEvent::KeyEvent(evt) = evt {
-                if let WlKeyboardKeyState::Pressed = evt.keystate {
-                    if let Some(txt) = evt.as_utf8() {
-                        print!("{}", txt);
-                        ::std::io::stdout().flush().unwrap();
-                    }
-                }
-            }
-        }
-        event_iterator.dispatch().expect("Connection with the compositor was lost.");
-    }
+        display.flush().unwrap();
+        event_queue.dispatch().unwrap();
+}
 }
