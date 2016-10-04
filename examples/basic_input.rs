@@ -36,7 +36,7 @@ declare_handler!(ShellHandler, wl_shell_surface::Handler, wl_shell_surface::WlSh
 struct KbdHandler;
 
 impl wayland_kbd::Handler for KbdHandler {
-    fn key(&mut self, _: &mut EventQueueHandle, _: &wl_keyboard::WlKeyboard, _: u32, _: u32, _: u32,
+    fn key(&mut self, _: &mut EventQueueHandle, _: &wl_keyboard::WlKeyboard, _: u32, _: u32, _: u32, _: u32,
            state: wl_keyboard::KeyState, utf8: Option<String>) {
         if let wl_keyboard::KeyState::Pressed = state {
             if let Some(txt) = utf8 {

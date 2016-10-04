@@ -130,13 +130,13 @@ impl<H: Handler> MappedKeyboard<H> {
 
 #[allow(unused_variables)]
 pub trait Handler {
-    fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, keysyms: Vec<u32>) {
+    fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, rawkeys: &[u32], keysyms: &[u32]) {
     }
 
     fn leave(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface) {
     }
 
-    fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, keysym: u32, state: KeyState, utf8: Option<String>) {
+    fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, rawkey: u32, keysym: u32, state: KeyState, utf8: Option<String>) {
     }
 
     fn repeat_info(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, rate: i32, delay: i32) {
@@ -149,9 +149,9 @@ impl<H: Handler> wl_keyboard::Handler for MappedKeyboard<H> {
     }
 
     fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, keys: Vec<u8>) {
-        let keys: &[u32] = unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len()/4) };
-        let keys = keys.iter().map(|k| self.state.get_one_sym(*k)).collect();
-        self.handler.enter(evqh, proxy, serial, surface, keys)
+        let rawkeys: &[u32] = unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len()/4) };
+        let keys: Vec<u32> = rawkeys.iter().map(|k| self.state.get_one_sym(*k)).collect();
+        self.handler.enter(evqh, proxy, serial, surface, rawkeys, &keys)
     }
 
     fn leave(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface) {
@@ -161,7 +161,7 @@ impl<H: Handler> wl_keyboard::Handler for MappedKeyboard<H> {
     fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, key: u32, state: KeyState) {
         let sym = self.state.get_one_sym(key);
         let utf8 = self.state.get_utf8(key);
-        self.handler.key(evqh, proxy, serial, time, sym, state, utf8)
+        self.handler.key(evqh, proxy, serial, time, key, sym, state, utf8)
     }
 
     fn modifiers(&mut self, _: &mut EventQueueHandle, _: &WlKeyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) {

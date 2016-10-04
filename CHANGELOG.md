@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.6.0 - 2016-10-04
+
+Expose raw keycode too in handlers
+
+## 0.5.0 - 2016-10-03
+
+Update to wayland-client-0.7
+
 ## 0.4.0 - 2016-05-29
 
 Update to wayland-client-0.6
