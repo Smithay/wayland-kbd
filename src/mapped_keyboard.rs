@@ -17,6 +17,8 @@ struct KbState {
     xkb_state: *mut ffi::xkb_state
 }
 
+unsafe impl Send for KbState { }
+
 impl KbState {
     fn update_modifiers(&mut self, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) {
         unsafe {
