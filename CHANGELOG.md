@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.2 - 2016-10-09
+
+MappedKeyboard is now Send.
+
 ## 0.6.1 - 2016-10-09
 
 Add a handler() method to access the underlying handler
