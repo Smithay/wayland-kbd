@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.1 - 2016-10-09
+
+Add a handler() method to access the underlying handler
+
 ## 0.6.0 - 2016-10-04
 
 Expose raw keycode too in handlers
