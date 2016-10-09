@@ -126,6 +126,10 @@ impl<H: Handler> MappedKeyboard<H> {
         state.xkb_keymap = xkb_keymap;
         state.xkb_state = xkb_state;
     }
+
+    pub fn handler(&mut self) -> &mut H {
+        &mut self.handler
+    }
 }
 
 #[allow(unused_variables)]
