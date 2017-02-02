@@ -1,6 +1,6 @@
 [package]
 name = "wayland-kbd"
-version = "0.6.2"
+version = "0.6.3"
 documentation = "https://vberger.github.io/wayland-kbd/wayland_kbd/"
 repository = "https://github.com/vberger/wayland-kbd"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
@@ -20,5 +20,5 @@ dlib = "0.3"
 
 [dev-dependencies]
 wayland-client = { version = "0.7.0", features = ["dlopen"] }
-byteorder = ">= 0.3, < 0.6"
+byteorder = "1.0.0"
 tempfile = "2.1"
