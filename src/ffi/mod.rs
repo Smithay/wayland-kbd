@@ -4,16 +4,16 @@ use std::os::raw::{c_char, c_int, c_void, c_uint};
 
 pub mod keysyms;
 
-pub const XKB_MOD_NAME_SHIFT   : &'static str  = "Shift";
-pub const XKB_MOD_NAME_CAPS    : &'static str  = "Lock";
-pub const XKB_MOD_NAME_CTRL    : &'static str  = "Control";
-pub const XKB_MOD_NAME_ALT     : &'static str  = "Mod1";
-pub const XKB_MOD_NAME_NUM     : &'static str  = "Mod2";
-pub const XKB_MOD_NAME_LOGO    : &'static str  = "Mod4";
+pub const XKB_MOD_NAME_SHIFT   : &'static [u8]  = b"Shift\0";
+pub const XKB_MOD_NAME_CAPS    : &'static [u8]  = b"Lock\0";
+pub const XKB_MOD_NAME_CTRL    : &'static [u8]  = b"Control\0";
+pub const XKB_MOD_NAME_ALT     : &'static [u8]  = b"Mod1\0";
+pub const XKB_MOD_NAME_NUM     : &'static [u8]  = b"Mod2\0";
+pub const XKB_MOD_NAME_LOGO    : &'static [u8]  = b"Mod4\0";
 
-pub const XKB_LED_NAME_CAPS    : &'static str  = "Caps Lock";
-pub const XKB_LED_NAME_NUM     : &'static str  = "Num Lock";
-pub const XKB_LED_NAME_SCROLL  : &'static str  = "Scroll Lock";
+pub const XKB_LED_NAME_CAPS    : &'static [u8]  = b"Caps Lock\0";
+pub const XKB_LED_NAME_NUM     : &'static [u8]  = b"Num Lock\0";
+pub const XKB_LED_NAME_SCROLL  : &'static [u8]  = b"Scroll Lock\0";
 
 pub struct xkb_context;
 pub struct xkb_keymap;
@@ -200,6 +200,7 @@ functions:
                              ) -> c_int,
     fn xkb_state_key_get_utf32(*mut xkb_state, xkb_keycode_t) -> u32,
     fn xkb_state_key_get_one_sym(*mut xkb_state, xkb_keycode_t) -> xkb_keysym_t,
+    fn xkb_state_mod_name_is_active(*mut xkb_state, *const c_char, xkb_state_component) -> c_int,
 );
 
 lazy_static!(

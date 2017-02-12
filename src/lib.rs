@@ -19,4 +19,4 @@ mod ffi;
 mod mapped_keyboard;
 
 pub use ffi::keysyms;
-pub use mapped_keyboard::{MappedKeyboard, MappedKeyboardError, Handler};
+pub use mapped_keyboard::{MappedKeyboard, MappedKeyboardError, Handler, ModifiersState};
