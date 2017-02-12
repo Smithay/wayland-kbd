@@ -1,6 +1,6 @@
 [package]
 name = "wayland-kbd"
-version = "0.6.3"
+version = "0.7.0"
 documentation = "https://vberger.github.io/wayland-kbd/wayland_kbd/"
 repository = "https://github.com/vberger/wayland-kbd"
 authors = ["Victor Berger <victor.berger@m4x.org>"]

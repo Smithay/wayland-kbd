@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.0 - 2017-02-12
+
+Track modifier keys state and expose them in callbacks
+
 ## 0.6.2 - 2016-10-09
 
 MappedKeyboard is now Send.
