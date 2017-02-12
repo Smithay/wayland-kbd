@@ -13,7 +13,7 @@ use wayland_client::{EventQueueHandle, EnvHandler};
 use wayland_client::protocol::{wl_compositor, wl_shell, wl_shm, wl_shell_surface,
                                wl_seat, wl_keyboard};
 
-use wayland_kbd::MappedKeyboard;
+use wayland_kbd::{MappedKeyboard, ModifiersState};
 
 wayland_env!(WaylandEnv,
     compositor: wl_compositor::WlCompositor,
@@ -36,8 +36,8 @@ declare_handler!(ShellHandler, wl_shell_surface::Handler, wl_shell_surface::WlSh
 struct KbdHandler;
 
 impl wayland_kbd::Handler for KbdHandler {
-    fn key(&mut self, _: &mut EventQueueHandle, _: &wl_keyboard::WlKeyboard, _: u32, _: u32, _: u32, _: u32,
-           state: wl_keyboard::KeyState, utf8: Option<String>) {
+    fn key(&mut self, _: &mut EventQueueHandle, _: &wl_keyboard::WlKeyboard, _: u32, _: u32,
+            _: &ModifiersState,_: u32, _: u32, state: wl_keyboard::KeyState, utf8: Option<String>) {
         if let wl_keyboard::KeyState::Pressed = state {
             if let Some(txt) = utf8 {
                 print!("{}", txt);
