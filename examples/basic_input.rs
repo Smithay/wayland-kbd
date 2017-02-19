@@ -54,7 +54,7 @@ fn main() {
     };
 
     event_queue.add_handler(EnvHandler::<WaylandEnv>::new());
-    let registry = display.get_registry().expect("Display cannot be already destroyed.");
+    let registry = display.get_registry();
     event_queue.register::<_, EnvHandler<WaylandEnv>>(&registry,0);
     event_queue.sync_roundtrip().unwrap();
 
@@ -72,10 +72,10 @@ fn main() {
         let state = event_queue.state();
         // retrieve the EnvHandler
         let env = state.get_handler::<EnvHandler<WaylandEnv>>(0);
-        let surface = env.compositor.create_surface().expect("Compositor cannot be destroyed");
-        let shell_surface = env.shell.get_shell_surface(&surface).expect("Shell cannot be destroyed");
+        let surface = env.compositor.create_surface();
+        let shell_surface = env.shell.get_shell_surface(&surface);
 
-        let pool = env.shm.create_pool(tmp.as_raw_fd(), 40_000).expect("Shm cannot be destroyed");
+        let pool = env.shm.create_pool(tmp.as_raw_fd(), 40_000);
         // match a buffer on the part we wrote on
         let buffer = pool.create_buffer(0, 100, 100, 400, wl_shm::Format::Argb8888).expect("The pool cannot be already dead");
 
@@ -86,7 +86,7 @@ fn main() {
         // commit
         surface.commit();
 
-        let keyboard = env.seat.get_keyboard().expect("Seat cannot be destroyed.");
+        let keyboard = env.seat.get_keyboard().expect("Seat cannot be already destroyed.");
 
         // we can let the other objects go out of scope
         // their associated wyland objects won't automatically be destroyed

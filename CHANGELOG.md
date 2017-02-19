@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.1 - 2017-02-19
+
+Update wayland-client dependency
+
 ## 0.7.0 - 2017-02-12
 
 Track modifier keys state and expose them in callbacks
