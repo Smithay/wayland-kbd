@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.1 - 2017-03-19
+
+wayland-kbd is compatible with wayland-client-0.9.x
+
 ## 0.8.0 - 2017-03-02
 
 Update wayland-client dependency
