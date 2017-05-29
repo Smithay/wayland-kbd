@@ -1,6 +1,10 @@
 # Change Log
 
-## 0.8.1 - 2017-03-19
+## 0.9.0 - 2017-05-29
+
+0.8.1 should have been 0.9.0
+
+## 0.8.1 - 2017-03-19 [yanked]
 
 wayland-kbd is compatible with wayland-client-0.9.x
 
