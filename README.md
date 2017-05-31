@@ -3,4 +3,4 @@ Keyboard utilities for the wayland-client library. Mainly handling keymaps with 
 
 # Documentation
 
-[Available online](http://vberger.github.io/wayland-kbd/wayland_kbd/)
+[Available online](https://docs.rs/wayland-kbd/)
