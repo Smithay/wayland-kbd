@@ -1,15 +1,15 @@
 [package]
 name = "wayland-kbd"
-version = "0.9.0"
-documentation = "https://vberger.github.io/wayland-kbd/wayland_kbd/"
-repository = "https://github.com/vberger/wayland-kbd"
+version = "0.9.1"
+documentation = "https://smithay.github.io/wayland-kbd/wayland_kbd/"
+repository = "https://github.com/smithay/wayland-kbd"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
 license = "MIT"
 description = "Keyboard mapping utility for wayland-client using libxkbcommon."
 categories = ["gui"]
 
 [badges]
-travis-ci = { repository = "vberger/wayland-kbd" }
+travis-ci = { repository = "Smithay/wayland-kbd" }
 
 [dependencies]
 bitflags = ">=0.5, <0.8"

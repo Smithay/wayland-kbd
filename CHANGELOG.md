@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.9.1 - 2017-01-02
+
+Migrate the repo to smithay org
+
 ## 0.9.0 - 2017-05-29
 
 0.8.1 should have been 0.9.0
