@@ -104,33 +104,33 @@ pub enum xkb_key_direction {
 }
 
 bitflags!(
-    pub flags xkb_state_component: u32 {
+    pub struct xkb_state_component: u32 {
         /** Depressed modifiers, i.e. a key is physically holding them. */
-        const XKB_STATE_MODS_DEPRESSED = (1 << 0),
+        const XKB_STATE_MODS_DEPRESSED = (1 << 0);
         /** Latched modifiers, i.e. will be unset after the next non-modifier
          *  key press. */
-        const XKB_STATE_MODS_LATCHED = (1 << 1),
+        const XKB_STATE_MODS_LATCHED = (1 << 1);
         /** Locked modifiers, i.e. will be unset after the key provoking the
          *  lock has been pressed again. */
-        const XKB_STATE_MODS_LOCKED = (1 << 2),
+        const XKB_STATE_MODS_LOCKED = (1 << 2);
         /** Effective modifiers, i.e. currently active and affect key
          *  processing (derived from the other state components).
          *  Use this unless you explictly care how the state came about. */
-        const XKB_STATE_MODS_EFFECTIVE = (1 << 3),
+        const XKB_STATE_MODS_EFFECTIVE = (1 << 3);
         /** Depressed layout, i.e. a key is physically holding it. */
-        const XKB_STATE_LAYOUT_DEPRESSED = (1 << 4),
+        const XKB_STATE_LAYOUT_DEPRESSED = (1 << 4);
         /** Latched layout, i.e. will be unset after the next non-modifier
          *  key press. */
-        const XKB_STATE_LAYOUT_LATCHED = (1 << 5),
+        const XKB_STATE_LAYOUT_LATCHED = (1 << 5);
         /** Locked layout, i.e. will be unset after the key provoking the lock
          *  has been pressed again. */
-        const XKB_STATE_LAYOUT_LOCKED = (1 << 6),
+        const XKB_STATE_LAYOUT_LOCKED = (1 << 6);
         /** Effective layout, i.e. currently active and affects key processing
          *  (derived from the other state components).
          *  Use this unless you explictly care how the state came about. */
-        const XKB_STATE_LAYOUT_EFFECTIVE = (1 << 7),
+        const XKB_STATE_LAYOUT_EFFECTIVE = (1 << 7);
         /** LEDs (derived from the other state components). */
-        const XKB_STATE_LEDS = (1 << 8)
+        const XKB_STATE_LEDS = (1 << 8);
     }
 );
 
