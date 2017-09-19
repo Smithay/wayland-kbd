@@ -15,10 +15,10 @@ travis-ci = { repository = "Smithay/wayland-kbd" }
 bitflags = "0.9"
 lazy_static = "0.2"
 memmap = "0.4"
-wayland-client = "0.9"
+wayland-client = "0.10"
 dlib = "0.3"
 
 [dev-dependencies]
-wayland-client = { version = "0.9", features = ["dlopen"] }
+wayland-client = { version = "0.10", features = ["dlopen"] }
 byteorder = "1.0.0"
 tempfile = "2.1"

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.10.0 - 2017-09-19
+
+Update the lib to wayland-client-0.10
+
 ## 0.9.1 - 2017-01-02
 
 Migrate the repo to smithay org

@@ -1,4 +1,4 @@
-use wayland_client::EventQueueHandle;
+use wayland_client::{EventQueueHandle, StateToken};
 use wayland_client::protocol::wl_keyboard::{self, WlKeyboard, KeyState, KeymapFormat};
 use wayland_client::protocol::wl_surface::WlSurface;
 
@@ -152,22 +152,19 @@ impl Drop for KbState {
 }
 
 /// A wayland keyboard mapped to its keymap
-///
-/// It wraps an event iterator on this keyboard, catching the Keymap, Key, and Modifiers
-/// events of the keyboard to handle them using libxkbcommon. All other events are directly
-/// forwarded.
-pub struct MappedKeyboard<H: Handler> {
+pub struct MappedKeyboard {
     state: KbState,
-    handler: H
 }
 
+#[derive(Debug)]
+/// An error that occured while trying to initialize a mapped keyboard
 pub enum MappedKeyboardError {
-    XKBNotFound,
-    NoKeyboardOnSeat
+    /// libxkbcommon was not found
+    XKBNotFound
 }
 
-impl<H: Handler> MappedKeyboard<H> {
-    pub fn new(handler: H) -> Result<MappedKeyboard<H>, MappedKeyboardError> {
+impl MappedKeyboard {
+    fn new() -> Result<MappedKeyboard, MappedKeyboardError> {
         let xkbh = match ffi::XKBCOMMON_OPTION.as_ref() {
             Some(h) => h,
             None => return Err(MappedKeyboardError::XKBNotFound)
@@ -184,10 +181,8 @@ impl<H: Handler> MappedKeyboard<H> {
                 xkb_state: ptr::null_mut(),
                 mods_state: ModifiersState::new()
             },
-            handler: handler
         })
     }
-
 
     fn init(&mut self, fd: RawFd, size: usize) {
         let mut state = &mut self.state;
@@ -220,59 +215,71 @@ impl<H: Handler> MappedKeyboard<H> {
 
         state.mods_state.update_with(xkb_state);
     }
-
-    pub fn handler(&mut self) -> &mut H {
-        &mut self.handler
-    }
 }
 
-#[allow(unused_variables)]
-pub trait Handler {
-    fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, mods: &ModifiersState, rawkeys: &[u32], keysyms: &[u32]) {
-    }
-
-    fn leave(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface) {
-    }
-
-    fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, mods: &ModifiersState, rawkey: u32, keysym: u32, state: KeyState, utf8: Option<String>) {
-    }
-
-    fn repeat_info(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, rate: i32, delay: i32) {
-    }
+/// Register a keyboard with the implementation provided by this crate
+///
+/// This requires you to provide an implementation and its implementation data
+/// to receive the events after they have been interpreted with the keymap.
+///
+/// Returns a token to some state that was stored in the event queue. You can use
+/// it to remove this state once the wayland keyboard has been destroyed.
+///
+/// Returns an error if xkbcommon could not be initialized.
+pub fn register_kbd<ID: 'static>(evqh: &mut EventQueueHandle, kbd: &WlKeyboard, implem: MappedKeyboardImplementation<ID>, idata: ID) -> Result<StateToken<MappedKeyboard>, MappedKeyboardError> {
+    let mapped_kbd = MappedKeyboard::new()?;
+    let token = evqh.state().insert(mapped_kbd);
+    evqh.register(kbd, wl_keyboard_implementation(), (token.clone(), implem, idata));
+    Ok(token)
 }
 
-impl<H: Handler> wl_keyboard::Handler for MappedKeyboard<H> {
-    fn keymap(&mut self, _: &mut EventQueueHandle, _: &WlKeyboard, _: KeymapFormat, fd: RawFd, size: u32) {
-        self.init(fd, size as usize)
-    }
-
-    fn enter(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface, keys: Vec<u8>) {
-        let rawkeys: &[u32] = unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len()/4) };
-        let keys: Vec<u32> = rawkeys.iter().map(|k| self.state.get_one_sym(*k)).collect();
-        self.handler.enter(evqh, proxy, serial, surface, &self.state.mods_state, rawkeys, &keys)
-    }
-
-    fn leave(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, surface: &WlSurface) {
-        self.handler.leave(evqh, proxy, serial, surface)
-    }
-
-    fn key(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, serial: u32, time: u32, key: u32, state: KeyState) {
-        let sym = self.state.get_one_sym(key);
-        let utf8 = self.state.get_utf8(key);
-        self.handler.key(evqh, proxy, serial, time, &self.state.mods_state, key, sym, state, utf8)
-    }
-
-    fn modifiers(&mut self, _: &mut EventQueueHandle, _: &WlKeyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) {
-        self.state.update_modifiers(mods_depressed, mods_latched, mods_locked, group)
-    }
-
-    fn repeat_info(&mut self, evqh: &mut EventQueueHandle, proxy: &WlKeyboard, rate: i32, delay: i32) {
-        self.handler.repeat_info(evqh, proxy, rate, delay)
-    }
+pub struct MappedKeyboardImplementation<ID> {
+    pub enter: fn(evqh: &mut EventQueueHandle, idata: &mut ID, keyboard: &WlKeyboard, serial: u32, surface: &WlSurface, mods: ModifiersState, rawkeys: &[u32], keysyms: &[u32]),
+    pub leave: fn(evqh: &mut EventQueueHandle, idata: &mut ID, keyboard: &WlKeyboard, serial: u32, surface: &WlSurface),
+    pub key: fn(evqh: &mut EventQueueHandle, idata: &mut ID, keyboard: &WlKeyboard, serial: u32, time: u32, mods: ModifiersState, rawkey: u32, keysym: u32, state: KeyState, utf8: Option<String>),
+    pub repeat_info: fn(evqh: &mut EventQueueHandle, idata: &mut ID, keyboard: &WlKeyboard, rate: i32, delay: i32)
 }
 
-unsafe impl<H: Handler> ::wayland_client::Handler<WlKeyboard> for MappedKeyboard<H> {
-    unsafe fn message(&mut self, evq: &mut EventQueueHandle, proxy: &WlKeyboard, opcode: u32, args: *const ::wayland_client::sys::wl_argument) -> Result<(),()> {
-        <MappedKeyboard<H> as ::wayland_client::protocol::wl_keyboard::Handler>::__message(self, evq, proxy, opcode, args)
+fn wl_keyboard_implementation<ID: 'static>() -> wl_keyboard::Implementation<(StateToken<MappedKeyboard>, MappedKeyboardImplementation<ID>, ID)> {
+    wl_keyboard::Implementation {
+        keymap: |evqh, &mut (ref token, _, _), _keyboard, format, fd, size| {
+            let me = evqh.state().get_mut(token);
+            match format {
+                KeymapFormat::XkbV1 => {
+                    me.init(fd, size as usize);
+                },
+                KeymapFormat::NoKeymap => {
+                    // TODO: how to handle this (hopefully never occuring) case?
+                }
+            }
+        },
+        enter: |evqh, &mut (ref token, ref implem, ref mut idata), keyboard, serial, surface, keys| {
+            let rawkeys: &[u32] = unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len()/4) };
+            let (keys, mods_state) = {
+                let me = evqh.state().get_mut(token);
+                let keys: Vec<u32> = rawkeys.iter().map(|k| me.state.get_one_sym(*k)).collect();
+                (keys, me.state.mods_state.clone())
+            };
+            (implem.enter)(evqh, idata, keyboard, serial, surface, mods_state, rawkeys, &keys)
+        },
+        leave: |evqh, &mut (_, ref implem, ref mut idata), keyboard, serial, surface| {
+            (implem.leave)(evqh, idata, keyboard, serial, surface)
+        },
+        key: |evqh, &mut(ref token, ref implem, ref mut idata), keyboard, serial, time, key, state| {
+            let (sym, utf8, mods_state) = {
+                let me = evqh.state().get_mut(token);
+                let sym = me.state.get_one_sym(key);
+                let utf8 = me.state.get_utf8(key);
+                (sym, utf8, me.state.mods_state.clone())
+            };
+            (implem.key)(evqh, idata, keyboard, serial, time, mods_state, key, sym, state, utf8)
+        },
+        modifiers: |evqh, &mut(ref token, _, _), _keyboard, _, mods_depressed, mods_latched, mods_locked, group| {
+            let me = evqh.state().get_mut(token);
+            me.state.update_modifiers(mods_depressed, mods_latched, mods_locked, group)
+        },
+        repeat_info: |evqh, &mut (_, ref implem, ref mut idata), keyboard, rate, delay| {
+            (implem.repeat_info)(evqh, idata, keyboard, rate, delay)
+        }
     }
 }

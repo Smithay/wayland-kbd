@@ -9,11 +9,11 @@ use byteorder::{WriteBytesExt, NativeEndian};
 use std::os::unix::io::AsRawFd;
 use std::io::Write;
 
-use wayland_client::{EventQueueHandle, EnvHandler};
+use wayland_client::EnvHandler;
 use wayland_client::protocol::{wl_compositor, wl_shell, wl_shm, wl_shell_surface,
                                wl_seat, wl_keyboard};
 
-use wayland_kbd::{MappedKeyboard, ModifiersState};
+use wayland_kbd::{register_kbd, MappedKeyboardImplementation};
 
 wayland_env!(WaylandEnv,
     compositor: wl_compositor::WlCompositor,
@@ -22,27 +22,33 @@ wayland_env!(WaylandEnv,
     shell: wl_shell::WlShell
 );
 
-struct ShellHandler;
-
-impl wl_shell_surface::Handler for ShellHandler {
-    // required to avoid being marked as "unresponsive"
-    fn ping(&mut self, _: &mut EventQueueHandle, me: &wl_shell_surface::WlShellSurface, serial: u32) {
-        me.pong(serial);
+fn shell_surface_implementation() -> wl_shell_surface::Implementation<()> {
+    wl_shell_surface::Implementation {
+        ping: |_, _, shell_surface, serial| {
+            shell_surface.pong(serial)
+        },
+        configure: |_, _, _, _, _, _| { /* not used in this example */},
+        popup_done: |_, _, _| { /* not used in this example */ }
     }
 }
 
-declare_handler!(ShellHandler, wl_shell_surface::Handler, wl_shell_surface::WlShellSurface);
-
-struct KbdHandler;
-
-impl wayland_kbd::Handler for KbdHandler {
-    fn key(&mut self, _: &mut EventQueueHandle, _: &wl_keyboard::WlKeyboard, _: u32, _: u32,
-            _: &ModifiersState,_: u32, _: u32, state: wl_keyboard::KeyState, utf8: Option<String>) {
-        if let wl_keyboard::KeyState::Pressed = state {
-            if let Some(txt) = utf8 {
-                print!("{}", txt);
-                ::std::io::stdout().flush().unwrap();
+fn kbd_implementation() -> MappedKeyboardImplementation<()> {
+    MappedKeyboardImplementation {
+        enter: |_, _, _, _, _, mods, _, keysyms| {
+            println!("Gained focus while {} keys pressed and modifiers are {:?}.", keysyms.len(), mods);
+        },
+        leave: |_, _, _, _, _| {
+            println!("Lost focus.");
+        },
+        key: |_, _, _, _, time, mods, _, _, state, utf8| {
+            if state == wl_keyboard::KeyState::Pressed {
+                if let Some(txt) = utf8 {
+                    println!("Received text \"{}\" at time {} (modifiers are: {:?}).", txt, time, mods);
+                }
             }
+        },
+        repeat_info: |_, _, _, rate, delay| {
+            println!("Received repeat info: start repeating every {}ms after an initial delay of {}ms", rate, delay);
         }
     }
 }
@@ -53,9 +59,8 @@ fn main() {
         Err(e) => panic!("Cannot connect to wayland server: {:?}", e)
     };
 
-    event_queue.add_handler(EnvHandler::<WaylandEnv>::new());
     let registry = display.get_registry();
-    event_queue.register::<_, EnvHandler<WaylandEnv>>(&registry,0);
+    let env_token = EnvHandler::<WaylandEnv>::init(&mut event_queue, &registry);
     event_queue.sync_roundtrip().unwrap();
 
     // create a tempfile to write the conents of the window on
@@ -71,7 +76,7 @@ fn main() {
         // introduce a new scope because .state() borrows the event_queue
         let state = event_queue.state();
         // retrieve the EnvHandler
-        let env = state.get_handler::<EnvHandler<WaylandEnv>>(0);
+        let env = state.get(&env_token);
         let surface = env.compositor.create_surface();
         let shell_surface = env.shell.get_shell_surface(&surface);
 
@@ -94,10 +99,9 @@ fn main() {
         (shell_surface, keyboard)
     };
 
-    let shell_handler = event_queue.add_handler(ShellHandler);
-    event_queue.register::<_, ShellHandler>(&shell_surface, shell_handler);
-    let kbd_handler = event_queue.add_handler(MappedKeyboard::new(KbdHandler).ok().expect("libxkbcommon is missing!"));
-    event_queue.register::<_, MappedKeyboard<KbdHandler>>(&keyboard, kbd_handler);
+    register_kbd(&mut event_queue, &keyboard, kbd_implementation(), ()).unwrap();
+
+    event_queue.register(&shell_surface, shell_surface_implementation(), ());
 
     loop {
         display.flush().unwrap();
