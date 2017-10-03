@@ -1,4 +1,5 @@
 #![allow(dead_code, non_camel_case_types)]
+#![cfg_attr(rustfmt, rustfmt_skip)]
 
 use std::os::raw::{c_char, c_int, c_void, c_uint};
 

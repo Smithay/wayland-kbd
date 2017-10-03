@@ -1,21 +1,18 @@
+extern crate byteorder;
+extern crate tempfile;
 #[macro_use]
 extern crate wayland_client;
 extern crate wayland_kbd;
-extern crate byteorder;
-extern crate tempfile;
 
-use byteorder::{WriteBytesExt, NativeEndian};
-
-use std::os::unix::io::AsRawFd;
+use byteorder::{NativeEndian, WriteBytesExt};
 use std::io::Write;
-
+use std::os::unix::io::AsRawFd;
 use wayland_client::EnvHandler;
-use wayland_client::protocol::{wl_compositor, wl_shell, wl_shm, wl_shell_surface,
-                               wl_seat, wl_keyboard};
-
+use wayland_client::protocol::{wl_compositor, wl_keyboard, wl_seat, wl_shell, wl_shell_surface, wl_shm};
 use wayland_kbd::{register_kbd, MappedKeyboardImplementation};
 
-wayland_env!(WaylandEnv,
+wayland_env!(
+    WaylandEnv,
     compositor: wl_compositor::WlCompositor,
     seat: wl_seat::WlSeat,
     shm: wl_shm::WlShm,
@@ -24,39 +21,48 @@ wayland_env!(WaylandEnv,
 
 fn shell_surface_implementation() -> wl_shell_surface::Implementation<()> {
     wl_shell_surface::Implementation {
-        ping: |_, _, shell_surface, serial| {
-            shell_surface.pong(serial)
-        },
-        configure: |_, _, _, _, _, _| { /* not used in this example */},
-        popup_done: |_, _, _| { /* not used in this example */ }
+        ping: |_, _, shell_surface, serial| shell_surface.pong(serial),
+        configure: |_, _, _, _, _, _| { /* not used in this example */ },
+        popup_done: |_, _, _| { /* not used in this example */ },
     }
 }
 
 fn kbd_implementation() -> MappedKeyboardImplementation<()> {
     MappedKeyboardImplementation {
         enter: |_, _, _, _, _, mods, _, keysyms| {
-            println!("Gained focus while {} keys pressed and modifiers are {:?}.", keysyms.len(), mods);
+            println!(
+                "Gained focus while {} keys pressed and modifiers are {:?}.",
+                keysyms.len(),
+                mods
+            );
         },
         leave: |_, _, _, _, _| {
             println!("Lost focus.");
         },
-        key: |_, _, _, _, time, mods, _, _, state, utf8| {
-            if state == wl_keyboard::KeyState::Pressed {
-                if let Some(txt) = utf8 {
-                    println!("Received text \"{}\" at time {} (modifiers are: {:?}).", txt, time, mods);
-                }
+        key: |_, _, _, _, time, mods, _, _, state, utf8| if state == wl_keyboard::KeyState::Pressed {
+            if let Some(txt) = utf8 {
+                println!(
+                    "Received text \"{}\" at time {} (modifiers are: {:?}).",
+                    txt,
+                    time,
+                    mods
+                );
             }
         },
         repeat_info: |_, _, _, rate, delay| {
-            println!("Received repeat info: start repeating every {}ms after an initial delay of {}ms", rate, delay);
-        }
+            println!(
+                "Received repeat info: start repeating every {}ms after an initial delay of {}ms",
+                rate,
+                delay
+            );
+        },
     }
 }
 
 fn main() {
     let (display, mut event_queue) = match wayland_client::default_connect() {
         Ok(ret) => ret,
-        Err(e) => panic!("Cannot connect to wayland server: {:?}", e)
+        Err(e) => panic!("Cannot connect to wayland server: {:?}", e),
     };
 
     let registry = display.get_registry();
@@ -64,7 +70,9 @@ fn main() {
     event_queue.sync_roundtrip().unwrap();
 
     // create a tempfile to write the conents of the window on
-    let mut tmp = tempfile::tempfile().ok().expect("Unable to create a tempfile.");
+    let mut tmp = tempfile::tempfile()
+        .ok()
+        .expect("Unable to create a tempfile.");
     // write the contents to it, lets put a red background
     for _ in 0..10_000 {
         let _ = tmp.write_u32::<NativeEndian>(0xFFFF0000);
@@ -82,7 +90,8 @@ fn main() {
 
         let pool = env.shm.create_pool(tmp.as_raw_fd(), 40_000);
         // match a buffer on the part we wrote on
-        let buffer = pool.create_buffer(0, 100, 100, 400, wl_shm::Format::Argb8888).expect("The pool cannot be already dead");
+        let buffer = pool.create_buffer(0, 100, 100, 400, wl_shm::Format::Argb8888)
+            .expect("The pool cannot be already dead");
 
         // make our surface as a toplevel one
         shell_surface.set_toplevel();
@@ -91,7 +100,9 @@ fn main() {
         // commit
         surface.commit();
 
-        let keyboard = env.seat.get_keyboard().expect("Seat cannot be already destroyed.");
+        let keyboard = env.seat
+            .get_keyboard()
+            .expect("Seat cannot be already destroyed.");
 
         // we can let the other objects go out of scope
         // their associated wyland objects won't automatically be destroyed
@@ -106,5 +117,5 @@ fn main() {
     loop {
         display.flush().unwrap();
         event_queue.dispatch().unwrap();
-}
+    }
 }

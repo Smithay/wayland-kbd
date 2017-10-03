@@ -3,6 +3,7 @@
 //
 
 #![allow(non_upper_case_globals)]
+#![cfg_attr(rustfmt, rustfmt_skip)]
 
 /***********************************************************
 Copyright 1987, 1994, 1998  The Open Group

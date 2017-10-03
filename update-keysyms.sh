@@ -12,6 +12,7 @@ echo "// This file was auto-generated using the update-keysyms.sh script." >> sr
 echo "//" >> src/ffi/keysyms.rs
 echo "" >> src/ffi/keysyms.rs
 echo "#![allow(non_upper_case_globals)]" >> src/ffi/keysyms.rs
+echo "#![cfg_attr(rustfmt, rustfmt_skip)]" >> src/ffi/keysyms.rs
 echo "" >> src/ffi/keysyms.rs
 
 cat $KEYSYMDEFS | sed -e '/XK_Ydiaeresis\s*0x100000ee/d' \
