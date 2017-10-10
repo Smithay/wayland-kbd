@@ -1,4 +1,4 @@
-use ffi;
+use ffi::{self, xkb_state_component};
 use ffi::XKBCOMMON_HANDLE as XKBH;
 use memmap::{Mmap, Protection};
 use std::fs::File;
@@ -57,42 +57,42 @@ impl ModifiersState {
             (XKBH.xkb_state_mod_name_is_active)(
                 state,
                 ffi::XKB_MOD_NAME_CTRL.as_ptr() as *const c_char,
-                ffi::XKB_STATE_MODS_EFFECTIVE,
+                xkb_state_component::XKB_STATE_MODS_EFFECTIVE,
             ) > 0
         };
         self.alt = unsafe {
             (XKBH.xkb_state_mod_name_is_active)(
                 state,
                 ffi::XKB_MOD_NAME_ALT.as_ptr() as *const c_char,
-                ffi::XKB_STATE_MODS_EFFECTIVE,
+                xkb_state_component::XKB_STATE_MODS_EFFECTIVE,
             ) > 0
         };
         self.shift = unsafe {
             (XKBH.xkb_state_mod_name_is_active)(
                 state,
                 ffi::XKB_MOD_NAME_SHIFT.as_ptr() as *const c_char,
-                ffi::XKB_STATE_MODS_EFFECTIVE,
+                xkb_state_component::XKB_STATE_MODS_EFFECTIVE,
             ) > 0
         };
         self.caps_lock = unsafe {
             (XKBH.xkb_state_mod_name_is_active)(
                 state,
                 ffi::XKB_MOD_NAME_CAPS.as_ptr() as *const c_char,
-                ffi::XKB_STATE_MODS_EFFECTIVE,
+                xkb_state_component::XKB_STATE_MODS_EFFECTIVE,
             ) > 0
         };
         self.logo = unsafe {
             (XKBH.xkb_state_mod_name_is_active)(
                 state,
                 ffi::XKB_MOD_NAME_LOGO.as_ptr() as *const c_char,
-                ffi::XKB_STATE_MODS_EFFECTIVE,
+                xkb_state_component::XKB_STATE_MODS_EFFECTIVE,
             ) > 0
         };
         self.num_lock = unsafe {
             (XKBH.xkb_state_mod_name_is_active)(
                 state,
                 ffi::XKB_MOD_NAME_NUM.as_ptr() as *const c_char,
-                ffi::XKB_STATE_MODS_EFFECTIVE,
+                xkb_state_component::XKB_STATE_MODS_EFFECTIVE,
             ) > 0
         };
     }
@@ -113,7 +113,7 @@ impl KbState {
                 group,
             )
         };
-        if mask.contains(ffi::XKB_STATE_MODS_EFFECTIVE) {
+        if mask.contains(xkb_state_component::XKB_STATE_MODS_EFFECTIVE) {
             // effective value of mods have changed, we need to update our state
             self.mods_state.update_with(self.xkb_state);
         }

@@ -12,13 +12,13 @@ categories = ["gui"]
 travis-ci = { repository = "Smithay/wayland-kbd" }
 
 [dependencies]
-bitflags = "0.9"
+bitflags = "1.0"
 lazy_static = "0.2"
 memmap = "0.4"
-wayland-client = "0.10"
-dlib = "0.3"
+wayland-client = "0.11"
+dlib = "0.4"
 
 [dev-dependencies]
-wayland-client = { version = "0.10", features = ["dlopen"] }
+wayland-client = { version = "0.11", features = ["dlopen"] }
 byteorder = "1.0.0"
 tempfile = "2.1"
