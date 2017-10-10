@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.11.0 - 2017-10-10
+
+Update dependencies wayland-client to 0.11, dlib to 0.4 and bitflags to 1.0
+
 ## 0.10.0 - 2017-09-19
 
 Update the lib to wayland-client-0.10
