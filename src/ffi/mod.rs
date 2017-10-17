@@ -19,6 +19,8 @@ pub const XKB_LED_NAME_SCROLL  : &'static [u8]  = b"Scroll Lock\0";
 pub struct xkb_context;
 pub struct xkb_keymap;
 pub struct xkb_state;
+pub struct xkb_compose_table;
+pub struct xkb_compose_state;
 
 pub type xkb_keycode_t = u32;
 pub type xkb_keysym_t = u32;
@@ -47,6 +49,7 @@ pub struct xkb_rule_names {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum xkb_keysym_flags {
     /** Do not apply any flags. */
     XKB_KEYSYM_NO_FLAGS = 0,
@@ -55,6 +58,7 @@ pub enum xkb_keysym_flags {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum xkb_context_flags {
     /** Do not apply any context flags. */
     XKB_CONTEXT_NO_FLAGS = 0,
@@ -68,6 +72,7 @@ pub enum xkb_context_flags {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum xkb_log_level {
     /** Log critical internal errors only. */
     XKB_LOG_LEVEL_CRITICAL = 10,
@@ -82,13 +87,14 @@ pub enum xkb_log_level {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum xkb_keymap_compile_flags {
     /** Do not apply any flags. */
     XKB_KEYMAP_COMPILE_NO_FLAGS = 0,
-    __not_univariant = 42,
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum xkb_keymap_format {
     /** Cannot be used for creation */
     XKB_KEYMAP_USE_ORIGINAL_FORMAT = 0,
@@ -97,11 +103,46 @@ pub enum xkb_keymap_format {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum xkb_key_direction {
     /** The key was released. */
     XKB_KEY_UP,
     /** The key was pressed. */
     XKB_KEY_DOWN
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum xkb_compose_compile_flags {
+    XKB_COMPOSE_COMPILE_NO_FLAGS = 0
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum xkb_compose_format {
+    XKB_COMPOSE_FORMAT_TEXT_V1 = 1
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum xkb_compose_state_flags {
+    XKB_COMPOSE_STATE_NO_FLAGS = 0
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum xkb_compose_status {
+    XKB_COMPOSE_NOTHING,
+    XKB_COMPOSE_COMPOSING,
+    XKB_COMPOSE_COMPOSED,
+    XKB_COMPOSE_CANCELLED
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum xkb_compose_feed_result {
+    XKB_COMPOSE_FEED_IGNORED,
+    XKB_COMPOSE_FEED_ACCEPTED
 }
 
 bitflags!(
@@ -202,6 +243,15 @@ functions:
     fn xkb_state_key_get_utf32(*mut xkb_state, xkb_keycode_t) -> u32,
     fn xkb_state_key_get_one_sym(*mut xkb_state, xkb_keycode_t) -> xkb_keysym_t,
     fn xkb_state_mod_name_is_active(*mut xkb_state, *const c_char, xkb_state_component) -> c_int,
+    fn xkb_compose_table_new_from_locale(*mut xkb_context, *const c_char, xkb_compose_compile_flags) -> *mut xkb_compose_table,
+    fn xkb_compose_table_unref(*mut xkb_compose_table) -> (),
+    fn xkb_compose_state_new(*mut xkb_compose_table, xkb_compose_state_flags) -> *mut xkb_compose_state,
+    fn xkb_compose_state_unref(*mut xkb_compose_state) -> (),
+    fn xkb_compose_state_feed(*mut xkb_compose_state, xkb_keysym_t) -> xkb_compose_feed_result,
+    fn xkb_compose_state_reset(*mut xkb_compose_state) -> (),
+    fn xkb_compose_state_get_status(*mut xkb_compose_state) -> xkb_compose_status,
+    fn xkb_compose_state_get_utf8(*mut xkb_compose_state, *mut c_char, usize) -> c_int,
+    fn xkb_compose_state_get_one_sym(*mut xkb_compose_state) -> xkb_keysym_t,
 );
 
 lazy_static!(

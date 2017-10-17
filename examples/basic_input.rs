@@ -8,7 +8,7 @@ use byteorder::{NativeEndian, WriteBytesExt};
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use wayland_client::EnvHandler;
-use wayland_client::protocol::{wl_compositor, wl_keyboard, wl_seat, wl_shell, wl_shell_surface, wl_shm};
+use wayland_client::protocol::{wl_compositor, wl_seat, wl_shell, wl_shell_surface, wl_shm};
 use wayland_kbd::{register_kbd, MappedKeyboardImplementation};
 
 wayland_env!(
@@ -39,14 +39,10 @@ fn kbd_implementation() -> MappedKeyboardImplementation<()> {
         leave: |_, _, _, _, _| {
             println!("Lost focus.");
         },
-        key: |_, _, _, _, time, mods, _, _, state, utf8| if state == wl_keyboard::KeyState::Pressed {
+        key: |_, _, _, _, _, _, _, sym, state, utf8| {
+            println!("Key {:?}: {:x}.", state, sym);
             if let Some(txt) = utf8 {
-                println!(
-                    "Received text \"{}\" at time {} (modifiers are: {:?}).",
-                    txt,
-                    time,
-                    mods
-                );
+                println!("Received text \"{}\".", txt,);
             }
         },
         repeat_info: |_, _, _, rate, delay| {

@@ -1,9 +1,11 @@
 use ffi::{self, xkb_state_component};
 use ffi::XKBCOMMON_HANDLE as XKBH;
 use memmap::{Mmap, Protection};
+use std::env;
 use std::ffi::CString;
 use std::fs::File;
 use std::os::raw::c_char;
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::io::{FromRawFd, RawFd};
 use std::ptr;
 use wayland_client::EventQueueHandle;
@@ -14,6 +16,8 @@ struct KbState {
     xkb_context: *mut ffi::xkb_context,
     xkb_keymap: *mut ffi::xkb_keymap,
     xkb_state: *mut ffi::xkb_state,
+    xkb_compose_table: *mut ffi::xkb_compose_table,
+    xkb_compose_state: *mut ffi::xkb_compose_state,
     mods_state: ModifiersState,
     locked: bool,
 }
@@ -124,14 +128,14 @@ impl KbState {
         }
     }
 
-    fn get_one_sym(&self, keycode: u32) -> u32 {
+    fn get_one_sym_raw(&mut self, keycode: u32) -> u32 {
         if !self.ready() {
             return 0;
         }
         unsafe { (XKBH.xkb_state_key_get_one_sym)(self.xkb_state, keycode + 8) }
     }
 
-    fn get_utf8(&self, keycode: u32) -> Option<String> {
+    fn get_utf8_raw(&mut self, keycode: u32) -> Option<String> {
         if !self.ready() {
             return None;
         }
@@ -156,6 +160,48 @@ impl KbState {
         Some(unsafe { String::from_utf8_unchecked(buffer) })
     }
 
+    fn compose_feed(&mut self, keysym: u32) -> Option<ffi::xkb_compose_feed_result> {
+        if !self.ready() || self.xkb_compose_state.is_null() {
+            return None;
+        }
+        Some(unsafe {
+            (XKBH.xkb_compose_state_feed)(self.xkb_compose_state, keysym)
+        })
+    }
+
+    fn compose_status(&mut self) -> Option<ffi::xkb_compose_status> {
+        if !self.ready() || self.xkb_compose_state.is_null() {
+            return None;
+        }
+        Some(unsafe {
+            (XKBH.xkb_compose_state_get_status)(self.xkb_compose_state)
+        })
+    }
+
+    fn compose_get_utf8(&mut self) -> Option<String> {
+        if !self.ready() || self.xkb_compose_state.is_null() {
+            return None;
+        }
+        let size =
+            unsafe { (XKBH.xkb_compose_state_get_utf8)(self.xkb_compose_state, ptr::null_mut(), 0) } + 1;
+        if size <= 1 {
+            return None;
+        };
+        let mut buffer = Vec::with_capacity(size as usize);
+        unsafe {
+            buffer.set_len(size as usize);
+            (XKBH.xkb_compose_state_get_utf8)(
+                self.xkb_compose_state,
+                buffer.as_mut_ptr() as *mut _,
+                size as usize,
+            );
+        };
+        // remove the final `\0`
+        buffer.pop();
+        // libxkbcommon will always provide valid UTF8
+        Some(unsafe { String::from_utf8_unchecked(buffer) })
+    }
+
     fn new() -> Result<KbState, MappedKeyboardError> {
         let xkbh = match ffi::XKBCOMMON_OPTION.as_ref() {
             Some(h) => h,
@@ -166,13 +212,54 @@ impl KbState {
             return Err(MappedKeyboardError::XKBNotFound);
         }
 
-        Ok(KbState {
+        let mut me = KbState {
             xkb_context: xkb_context,
             xkb_keymap: ptr::null_mut(),
             xkb_state: ptr::null_mut(),
+            xkb_compose_table: ptr::null_mut(),
+            xkb_compose_state: ptr::null_mut(),
             mods_state: ModifiersState::new(),
             locked: false,
-        })
+        };
+
+        unsafe {
+            me.init_compose();
+        }
+
+        Ok(me)
+    }
+
+    unsafe fn init_compose(&mut self) {
+        let locale = env::var_os("LC_ALL")
+            .or_else(|| env::var_os("LC_CTYPE"))
+            .or_else(|| env::var_os("LANG"))
+            .unwrap_or_else(|| "C".into());
+        let locale = CString::new(locale.into_vec()).unwrap();
+
+        let compose_table = (XKBH.xkb_compose_table_new_from_locale)(
+            self.xkb_context,
+            locale.as_ptr(),
+            ffi::xkb_compose_compile_flags::XKB_COMPOSE_COMPILE_NO_FLAGS,
+        );
+
+        if compose_table.is_null() {
+            // init of compose table failed, continue without compose
+            return;
+        }
+
+        let compose_state = (XKBH.xkb_compose_state_new)(
+            compose_table,
+            ffi::xkb_compose_state_flags::XKB_COMPOSE_STATE_NO_FLAGS,
+        );
+
+        if compose_state.is_null() {
+            // init of compose state failed, continue without compose
+            (XKBH.xkb_compose_table_unref)(compose_table);
+            return;
+        }
+
+        self.xkb_compose_table = compose_table;
+        self.xkb_compose_state = compose_state;
     }
 
     unsafe fn post_init(&mut self, xkb_keymap: *mut ffi::xkb_keymap) {
@@ -231,6 +318,8 @@ impl KbState {
 impl Drop for KbState {
     fn drop(&mut self) {
         unsafe {
+            (XKBH.xkb_compose_state_unref)(self.xkb_compose_state);
+            (XKBH.xkb_compose_table_unref)(self.xkb_compose_table);
             (XKBH.xkb_state_unref)(self.xkb_state);
             (XKBH.xkb_keymap_unref)(self.xkb_keymap);
             (XKBH.xkb_context_unref)(self.xkb_context);
@@ -400,7 +489,7 @@ fn wl_keyboard_implementation<ID: 'static>(
             let rawkeys: &[u32] =
                 unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len() / 4) };
             let (keys, mods_state) = {
-                let keys: Vec<u32> = rawkeys.iter().map(|k| state.get_one_sym(*k)).collect();
+                let keys: Vec<u32> = rawkeys.iter().map(|k| state.get_one_sym_raw(*k)).collect();
                 (keys, state.mods_state.clone())
             };
             (implem.enter)(
@@ -424,11 +513,24 @@ fn wl_keyboard_implementation<ID: 'static>(
               time,
               key,
               key_state| {
-            let (sym, utf8, mods_state) = {
-                let sym = state.get_one_sym(key);
-                let utf8 = state.get_utf8(key);
-                (sym, utf8, state.mods_state.clone())
+            let sym = state.get_one_sym_raw(key);
+            let ignore_text = if key_state == KeyState::Pressed {
+                state.compose_feed(sym) != Some(ffi::xkb_compose_feed_result::XKB_COMPOSE_FEED_ACCEPTED)
+            } else {
+                true
             };
+            let utf8 = if ignore_text {
+                None
+            } else if let Some(status) = state.compose_status() {
+                match status {
+                    ffi::xkb_compose_status::XKB_COMPOSE_COMPOSED => state.compose_get_utf8(),
+                    ffi::xkb_compose_status::XKB_COMPOSE_NOTHING => state.get_utf8_raw(key),
+                    _ => None,
+                }
+            } else {
+                state.get_utf8_raw(key)
+            };
+            let mods_state = state.mods_state.clone();
             (implem.key)(
                 evqh,
                 idata,
