@@ -5,7 +5,7 @@ use std::fs::File;
 use std::os::raw::c_char;
 use std::os::unix::io::{FromRawFd, RawFd};
 use std::ptr;
-use wayland_client::{EventQueueHandle, StateToken};
+use wayland_client::EventQueueHandle;
 use wayland_client::protocol::wl_keyboard::{self, KeyState, KeymapFormat, WlKeyboard};
 use wayland_client::protocol::wl_surface::WlSurface;
 
@@ -119,11 +119,11 @@ impl KbState {
         }
     }
 
-    pub fn get_one_sym(&self, keycode: u32) -> u32 {
+    fn get_one_sym(&self, keycode: u32) -> u32 {
         unsafe { (XKBH.xkb_state_key_get_one_sym)(self.xkb_state, keycode + 8) }
     }
 
-    pub fn get_utf8(&self, keycode: u32) -> Option<String> {
+    fn get_utf8(&self, keycode: u32) -> Option<String> {
         let size =
             unsafe { (XKBH.xkb_state_key_get_utf8)(self.xkb_state, keycode + 8, ptr::null_mut(), 0) } + 1;
         if size <= 1 {
@@ -144,32 +144,8 @@ impl KbState {
         // libxkbcommon will always provide valid UTF8
         Some(unsafe { String::from_utf8_unchecked(buffer) })
     }
-}
 
-impl Drop for KbState {
-    fn drop(&mut self) {
-        unsafe {
-            (XKBH.xkb_state_unref)(self.xkb_state);
-            (XKBH.xkb_keymap_unref)(self.xkb_keymap);
-            (XKBH.xkb_context_unref)(self.xkb_context);
-        }
-    }
-}
-
-/// A wayland keyboard mapped to its keymap
-pub struct MappedKeyboard {
-    state: KbState,
-}
-
-#[derive(Debug)]
-/// An error that occured while trying to initialize a mapped keyboard
-pub enum MappedKeyboardError {
-    /// libxkbcommon was not found
-    XKBNotFound,
-}
-
-impl MappedKeyboard {
-    fn new() -> Result<MappedKeyboard, MappedKeyboardError> {
+    fn new() -> Result<KbState, MappedKeyboardError> {
         let xkbh = match ffi::XKBCOMMON_OPTION.as_ref() {
             Some(h) => h,
             None => return Err(MappedKeyboardError::XKBNotFound),
@@ -179,26 +155,22 @@ impl MappedKeyboard {
             return Err(MappedKeyboardError::XKBNotFound);
         }
 
-        Ok(MappedKeyboard {
-            state: KbState {
-                xkb_context: xkb_context,
-                xkb_keymap: ptr::null_mut(),
-                xkb_state: ptr::null_mut(),
-                mods_state: ModifiersState::new(),
-            },
+        Ok(KbState {
+            xkb_context: xkb_context,
+            xkb_keymap: ptr::null_mut(),
+            xkb_state: ptr::null_mut(),
+            mods_state: ModifiersState::new(),
         })
     }
 
     fn init(&mut self, fd: RawFd, size: usize) {
-        let mut state = &mut self.state;
-
         let map =
             unsafe { Mmap::open_with_offset(&File::from_raw_fd(fd), Protection::Read, 0, size).unwrap() };
 
         let xkb_keymap = {
             unsafe {
                 (XKBH.xkb_keymap_new_from_string)(
-                    state.xkb_context,
+                    self.xkb_context,
                     map.ptr() as *const _,
                     ffi::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
                     ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
@@ -212,11 +184,28 @@ impl MappedKeyboard {
 
         let xkb_state = unsafe { (XKBH.xkb_state_new)(xkb_keymap) };
 
-        state.xkb_keymap = xkb_keymap;
-        state.xkb_state = xkb_state;
+        self.xkb_keymap = xkb_keymap;
+        self.xkb_state = xkb_state;
 
-        state.mods_state.update_with(xkb_state);
+        self.mods_state.update_with(xkb_state);
     }
+}
+
+impl Drop for KbState {
+    fn drop(&mut self) {
+        unsafe {
+            (XKBH.xkb_state_unref)(self.xkb_state);
+            (XKBH.xkb_keymap_unref)(self.xkb_keymap);
+            (XKBH.xkb_context_unref)(self.xkb_context);
+        }
+    }
+}
+
+#[derive(Debug)]
+/// An error that occured while trying to initialize a mapped keyboard
+pub enum MappedKeyboardError {
+    /// libxkbcommon was not found
+    XKBNotFound,
 }
 
 /// Register a keyboard with the implementation provided by this crate
@@ -230,15 +219,14 @@ impl MappedKeyboard {
 /// Returns an error if xkbcommon could not be initialized.
 pub fn register_kbd<ID: 'static>(evqh: &mut EventQueueHandle, kbd: &WlKeyboard,
                                  implem: MappedKeyboardImplementation<ID>, idata: ID)
-                                 -> Result<StateToken<MappedKeyboard>, MappedKeyboardError> {
-    let mapped_kbd = MappedKeyboard::new()?;
-    let token = evqh.state().insert(mapped_kbd);
+                                 -> Result<(), MappedKeyboardError> {
+    let mapped_kbd = KbState::new()?;
     evqh.register(
         kbd,
         wl_keyboard_implementation(),
-        (token.clone(), implem, idata),
+        (mapped_kbd, implem, idata),
     );
-    Ok(token)
+    Ok(())
 }
 
 pub struct MappedKeyboardImplementation<ID> {
@@ -277,33 +265,25 @@ pub struct MappedKeyboardImplementation<ID> {
 
 fn wl_keyboard_implementation<ID: 'static>(
     )
-    -> wl_keyboard::Implementation<
-    (
-        StateToken<MappedKeyboard>,
-        MappedKeyboardImplementation<ID>,
-        ID,
-    ),
->
+    -> wl_keyboard::Implementation<(KbState, MappedKeyboardImplementation<ID>, ID)>
 {
     wl_keyboard::Implementation {
-        keymap: |evqh, &mut (ref token, _, _), _keyboard, format, fd, size| {
-            let me = evqh.state().get_mut(token);
+        keymap: |_, &mut (ref mut state, _, _), _keyboard, format, fd, size| {
             match format {
                 KeymapFormat::XkbV1 => {
-                    me.init(fd, size as usize);
+                    state.init(fd, size as usize);
                 }
                 KeymapFormat::NoKeymap => {
                     // TODO: how to handle this (hopefully never occuring) case?
                 }
             }
         },
-        enter: |evqh, &mut (ref token, ref implem, ref mut idata), keyboard, serial, surface, keys| {
+        enter: |evqh, &mut (ref mut state, ref implem, ref mut idata), keyboard, serial, surface, keys| {
             let rawkeys: &[u32] =
                 unsafe { ::std::slice::from_raw_parts(keys.as_ptr() as *const u32, keys.len() / 4) };
             let (keys, mods_state) = {
-                let me = evqh.state().get_mut(token);
-                let keys: Vec<u32> = rawkeys.iter().map(|k| me.state.get_one_sym(*k)).collect();
-                (keys, me.state.mods_state.clone())
+                let keys: Vec<u32> = rawkeys.iter().map(|k| state.get_one_sym(*k)).collect();
+                (keys, state.mods_state.clone())
             };
             (implem.enter)(
                 evqh,
@@ -319,12 +299,17 @@ fn wl_keyboard_implementation<ID: 'static>(
         leave: |evqh, &mut (_, ref implem, ref mut idata), keyboard, serial, surface| {
             (implem.leave)(evqh, idata, keyboard, serial, surface)
         },
-        key: |evqh, &mut (ref token, ref implem, ref mut idata), keyboard, serial, time, key, state| {
+        key: |evqh,
+              &mut (ref mut state, ref implem, ref mut idata),
+              keyboard,
+              serial,
+              time,
+              key,
+              key_state| {
             let (sym, utf8, mods_state) = {
-                let me = evqh.state().get_mut(token);
-                let sym = me.state.get_one_sym(key);
-                let utf8 = me.state.get_utf8(key);
-                (sym, utf8, me.state.mods_state.clone())
+                let sym = state.get_one_sym(key);
+                let utf8 = state.get_utf8(key);
+                (sym, utf8, state.mods_state.clone())
             };
             (implem.key)(
                 evqh,
@@ -335,22 +320,18 @@ fn wl_keyboard_implementation<ID: 'static>(
                 mods_state,
                 key,
                 sym,
-                state,
+                key_state,
                 utf8,
             )
         },
-        modifiers: |evqh,
-                    &mut (ref token, _, _),
+        modifiers: |_,
+                    &mut (ref mut state, _, _),
                     _keyboard,
                     _,
                     mods_depressed,
                     mods_latched,
                     mods_locked,
-                    group| {
-            let me = evqh.state().get_mut(token);
-            me.state
-                .update_modifiers(mods_depressed, mods_latched, mods_locked, group)
-        },
+                    group| { state.update_modifiers(mods_depressed, mods_latched, mods_locked, group) },
         repeat_info: |evqh, &mut (_, ref implem, ref mut idata), keyboard, rate, delay| {
             (implem.repeat_info)(evqh, idata, keyboard, rate, delay)
         },
