@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.12.0 - 2017-10-17
+
+- API change: nothing is stored in the event queue state
+- Add a method to initialize a mapped keyboard with provided RMLVO
+- Take dead keys and compose into account
+
 ## 0.11.0 - 2017-10-10
 
 Update dependencies wayland-client to 0.11, dlib to 0.4 and bitflags to 1.0
