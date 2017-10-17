@@ -22,4 +22,5 @@ mod ffi;
 mod mapped_keyboard;
 
 pub use ffi::keysyms;
-pub use mapped_keyboard::{register_kbd, MappedKeyboardError, MappedKeyboardImplementation, ModifiersState};
+pub use mapped_keyboard::{register_kbd, register_kbd_from_rmlvo, MappedKeyboardError,
+                          MappedKeyboardImplementation, ModifiersState, RMLVO};

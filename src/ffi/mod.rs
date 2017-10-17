@@ -39,11 +39,11 @@ pub const XKB_KEYCODE_MAX     :u32 = 0xffffffff - 1;
 
 #[repr(C)]
 pub struct xkb_rule_names {
-    rules:   *const c_char,
-    model:   *const c_char ,
-    layout:  *const c_char,
-    variant: *const c_char,
-    options: *const c_char,
+    pub rules:   *const c_char,
+    pub model:   *const c_char ,
+    pub layout:  *const c_char,
+    pub variant: *const c_char,
+    pub options: *const c_char,
 }
 
 #[repr(C)]

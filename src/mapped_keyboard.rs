@@ -1,6 +1,7 @@
 use ffi::{self, xkb_state_component};
 use ffi::XKBCOMMON_HANDLE as XKBH;
 use memmap::{Mmap, Protection};
+use std::ffi::CString;
 use std::fs::File;
 use std::os::raw::c_char;
 use std::os::unix::io::{FromRawFd, RawFd};
@@ -14,6 +15,7 @@ struct KbState {
     xkb_keymap: *mut ffi::xkb_keymap,
     xkb_state: *mut ffi::xkb_state,
     mods_state: ModifiersState,
+    locked: bool,
 }
 
 /// Represents the current state of the keyboard modifiers
@@ -102,6 +104,9 @@ unsafe impl Send for KbState {}
 
 impl KbState {
     fn update_modifiers(&mut self, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) {
+        if !self.ready() {
+            return;
+        }
         let mask = unsafe {
             (XKBH.xkb_state_update_mask)(
                 self.xkb_state,
@@ -120,10 +125,16 @@ impl KbState {
     }
 
     fn get_one_sym(&self, keycode: u32) -> u32 {
+        if !self.ready() {
+            return 0;
+        }
         unsafe { (XKBH.xkb_state_key_get_one_sym)(self.xkb_state, keycode + 8) }
     }
 
     fn get_utf8(&self, keycode: u32) -> Option<String> {
+        if !self.ready() {
+            return None;
+        }
         let size =
             unsafe { (XKBH.xkb_state_key_get_utf8)(self.xkb_state, keycode + 8, ptr::null_mut(), 0) } + 1;
         if size <= 1 {
@@ -160,34 +171,60 @@ impl KbState {
             xkb_keymap: ptr::null_mut(),
             xkb_state: ptr::null_mut(),
             mods_state: ModifiersState::new(),
+            locked: false,
         })
     }
 
-    fn init(&mut self, fd: RawFd, size: usize) {
-        let map =
-            unsafe { Mmap::open_with_offset(&File::from_raw_fd(fd), Protection::Read, 0, size).unwrap() };
-
-        let xkb_keymap = {
-            unsafe {
-                (XKBH.xkb_keymap_new_from_string)(
-                    self.xkb_context,
-                    map.ptr() as *const _,
-                    ffi::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
-                    ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
-                )
-            }
-        };
-
-        if xkb_keymap.is_null() {
-            panic!("Failed to load keymap!");
-        }
-
-        let xkb_state = unsafe { (XKBH.xkb_state_new)(xkb_keymap) };
-
+    unsafe fn post_init(&mut self, xkb_keymap: *mut ffi::xkb_keymap) {
+        let xkb_state = (XKBH.xkb_state_new)(xkb_keymap);
         self.xkb_keymap = xkb_keymap;
         self.xkb_state = xkb_state;
-
         self.mods_state.update_with(xkb_state);
+    }
+
+    unsafe fn de_init(&mut self) {
+        (XKBH.xkb_state_unref)(self.xkb_state);
+        self.xkb_state = ptr::null_mut();
+        (XKBH.xkb_keymap_unref)(self.xkb_keymap);
+        self.xkb_keymap = ptr::null_mut();
+    }
+
+    unsafe fn init_with_fd(&mut self, fd: RawFd, size: usize) {
+        let map = Mmap::open_with_offset(&File::from_raw_fd(fd), Protection::Read, 0, size).unwrap();
+
+        let xkb_keymap = (XKBH.xkb_keymap_new_from_string)(
+            self.xkb_context,
+            map.ptr() as *const _,
+            ffi::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
+            ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
+        );
+
+        if xkb_keymap.is_null() {
+            panic!("Received invalid keymap from compositor.");
+        }
+
+        self.post_init(xkb_keymap);
+    }
+
+    unsafe fn init_with_rmlvo(&mut self, names: ffi::xkb_rule_names) -> Result<(), MappedKeyboardError> {
+        let xkb_keymap = (XKBH.xkb_keymap_new_from_names)(
+            self.xkb_context,
+            &names,
+            ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
+        );
+
+        if xkb_keymap.is_null() {
+            return Err(MappedKeyboardError::BadNames);
+        }
+
+        self.post_init(xkb_keymap);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn ready(&self) -> bool {
+        !self.xkb_state.is_null()
     }
 }
 
@@ -204,8 +241,10 @@ impl Drop for KbState {
 #[derive(Debug)]
 /// An error that occured while trying to initialize a mapped keyboard
 pub enum MappedKeyboardError {
-    /// libxkbcommon was not found
+    /// libxkbcommon is not available
     XKBNotFound,
+    /// Provided RMLVO sepcified a keymap that would not be loaded
+    BadNames,
 }
 
 /// Register a keyboard with the implementation provided by this crate
@@ -213,14 +252,83 @@ pub enum MappedKeyboardError {
 /// This requires you to provide an implementation and its implementation data
 /// to receive the events after they have been interpreted with the keymap.
 ///
-/// Returns a token to some state that was stored in the event queue. You can use
-/// it to remove this state once the wayland keyboard has been destroyed.
+/// The keymap information will be loaded from the events sent by the compositor,
+/// as such you need to call this method as soon as you have created the keyboard
+/// to make sure this event does not get lost.
 ///
 /// Returns an error if xkbcommon could not be initialized.
 pub fn register_kbd<ID: 'static>(evqh: &mut EventQueueHandle, kbd: &WlKeyboard,
                                  implem: MappedKeyboardImplementation<ID>, idata: ID)
                                  -> Result<(), MappedKeyboardError> {
     let mapped_kbd = KbState::new()?;
+    evqh.register(
+        kbd,
+        wl_keyboard_implementation(),
+        (mapped_kbd, implem, idata),
+    );
+    Ok(())
+}
+
+/// The RMLVO description of a keymap
+///
+/// All fiels are optional, and the system default
+/// will be used if set to `None`.
+pub struct RMLVO {
+    /// The rules file to use
+    pub rules: Option<String>,
+    /// The keyboard model by which to interpret keycodes and LEDs
+    pub model: Option<String>,
+    /// A comma seperated list of layouts (languages) to include in the keymap
+    pub layout: Option<String>,
+    /// A comma seperated list of variants, one per layout, which may modify or
+    /// augment the respective layout in various ways
+    pub variant: Option<String>,
+    /// A comma seprated list of options, through which the user specifies
+    /// non-layout related preferences, like which key combinations are
+    /// used for switching layouts, or which key is the Compose key.
+    pub options: Option<String>,
+}
+
+/// Register a keyboard with the implementation provided by this crate
+///
+/// This requires you to provide an implementation and its implementation data
+/// to receive the events after they have been interpreted with the keymap.
+///
+/// The keymap will be loaded from the provided RMLVO rules. Any keymap provided
+/// by the compositor will be ignored.
+///
+/// Returns an error if xkbcommon could not be initialized.
+pub fn register_kbd_from_rmlvo<ID: 'static>(evqh: &mut EventQueueHandle, kbd: &WlKeyboard,
+                                            implem: MappedKeyboardImplementation<ID>, idata: ID,
+                                            rmlvo: RMLVO)
+                                            -> Result<(), MappedKeyboardError> {
+    let mut mapped_kbd = KbState::new()?;
+
+    fn to_cstring(s: Option<String>) -> Result<Option<CString>, MappedKeyboardError> {
+        s.map_or(Ok(None), |s| CString::new(s).map(Option::Some))
+            .map_err(|_| MappedKeyboardError::BadNames)
+    }
+
+    let rules = to_cstring(rmlvo.rules)?;
+    let model = to_cstring(rmlvo.model)?;
+    let layout = to_cstring(rmlvo.layout)?;
+    let variant = to_cstring(rmlvo.variant)?;
+    let options = to_cstring(rmlvo.options)?;
+
+    let xkb_names = ffi::xkb_rule_names {
+        rules: rules.map_or(ptr::null(), |s| s.as_ptr()),
+        model: model.map_or(ptr::null(), |s| s.as_ptr()),
+        layout: layout.map_or(ptr::null(), |s| s.as_ptr()),
+        variant: variant.map_or(ptr::null(), |s| s.as_ptr()),
+        options: options.map_or(ptr::null(), |s| s.as_ptr()),
+    };
+
+    unsafe {
+        mapped_kbd.init_with_rmlvo(xkb_names)?;
+    }
+
+    mapped_kbd.locked = true;
+
     evqh.register(
         kbd,
         wl_keyboard_implementation(),
@@ -269,10 +377,20 @@ fn wl_keyboard_implementation<ID: 'static>(
 {
     wl_keyboard::Implementation {
         keymap: |_, &mut (ref mut state, _, _), _keyboard, format, fd, size| {
-            match format {
-                KeymapFormat::XkbV1 => {
-                    state.init(fd, size as usize);
+            if state.locked {
+                // state is locked, ignore keymap updates
+                return;
+            }
+            if state.ready() {
+                // new keymap, we first deinit to free resources
+                unsafe {
+                    state.de_init();
                 }
+            }
+            match format {
+                KeymapFormat::XkbV1 => unsafe {
+                    state.init_with_fd(fd, size as usize);
+                },
                 KeymapFormat::NoKeymap => {
                     // TODO: how to handle this (hopefully never occuring) case?
                 }
