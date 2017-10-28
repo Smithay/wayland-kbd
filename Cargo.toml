@@ -14,7 +14,7 @@ travis-ci = { repository = "Smithay/wayland-kbd" }
 [dependencies]
 bitflags = "1.0"
 lazy_static = "0.2"
-memmap = "0.4"
+memmap = "0.6"
 wayland-client = "0.11"
 dlib = "0.4"
 

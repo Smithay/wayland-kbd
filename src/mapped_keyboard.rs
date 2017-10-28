@@ -1,6 +1,6 @@
 use ffi::{self, xkb_state_component};
 use ffi::XKBCOMMON_HANDLE as XKBH;
-use memmap::{Mmap, Protection};
+use memmap::MmapOptions;
 use std::env;
 use std::ffi::CString;
 use std::fs::File;
@@ -277,11 +277,11 @@ impl KbState {
     }
 
     unsafe fn init_with_fd(&mut self, fd: RawFd, size: usize) {
-        let map = Mmap::open_with_offset(&File::from_raw_fd(fd), Protection::Read, 0, size).unwrap();
+        let map = MmapOptions::new().len(size).map(&File::from_raw_fd(fd)).unwrap();
 
         let xkb_keymap = (XKBH.xkb_keymap_new_from_string)(
             self.xkb_context,
-            map.ptr() as *const _,
+            map.as_ptr() as *const _,
             ffi::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
             ffi::xkb_keymap_compile_flags::XKB_KEYMAP_COMPILE_NO_FLAGS,
         );
