@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.13.0 - 2017-10-29
+
+- Update to wayland-client 0.12
+
 ## 0.12.0 - 2017-10-17
 
 - API change: nothing is stored in the event queue state

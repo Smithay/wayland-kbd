@@ -1,6 +1,6 @@
 [package]
 name = "wayland-kbd"
-version = "0.12.0"
+version = "0.13.0"
 documentation = "https://smithay.github.io/wayland-kbd/wayland_kbd/"
 repository = "https://github.com/smithay/wayland-kbd"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
@@ -15,10 +15,10 @@ travis-ci = { repository = "Smithay/wayland-kbd" }
 bitflags = "1.0"
 lazy_static = "0.2"
 memmap = "0.6"
-wayland-client = "0.11"
+wayland-client = "0.12"
 dlib = "0.4"
 
 [dev-dependencies]
-wayland-client = { version = "0.11", features = ["dlopen"] }
+wayland-client = { version = "0.12", features = ["dlopen"] }
 byteorder = "1.0.0"
 tempfile = "2.1"
