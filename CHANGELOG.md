@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased
+
+- Update lazy_static dependency to 1.0
+
 ## 0.13.0 - 2017-10-29
 
 - Update to wayland-client 0.12
