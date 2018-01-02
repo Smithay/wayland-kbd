@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.1 - 2018-01-02
+
 - Update lazy_static dependency to 1.0
 
 ## 0.13.0 - 2017-10-29
